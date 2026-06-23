@@ -1,0 +1,2800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Curbside — Parking Enforcement Citation Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   CURBSIDE — design tokens
+   Asphalt + safety-amber palette, citation-pad signature element
+   ============================================================ */
+:root {
+  --asphalt: #15171A;
+  --asphalt-2: #1E2126;
+  --asphalt-3: #272B32;
+  --amber: #FFB200;
+  --amber-dim: #C98900;
+  --curb-red: #E13B2E;
+  --curb-red-dim: #5c2521;
+  --curb-green: #2FAE6A;
+  --curb-green-dim: #1f4f37;
+  --paper: #F4EFE2;
+  --ink: #1C1A14;
+  --slate: #9AA1AC;
+  --slate-light: #C7CCD3;
+  --hairline: rgba(255,255,255,0.09);
+  --radius: 14px;
+  --display: 'Oswald', sans-serif;
+  --body: 'IBM Plex Sans', sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--asphalt);
+  color: var(--slate-light);
+  font-family: var(--body);
+  -webkit-tap-highlight-color: transparent;
+}
+body { padding-bottom: 84px; }
+
+button { font-family: var(--body); cursor: pointer; }
+input, select, textarea {
+  font-family: var(--body);
+  background: var(--asphalt-3);
+  border: 1px solid var(--hairline);
+  color: var(--slate-light);
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 15px;
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
+label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+
+#app { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px 14px;
+  background: linear-gradient(180deg, var(--asphalt-2), var(--asphalt));
+  border-bottom: 1px solid var(--hairline);
+  position: sticky; top: 0; z-index: 20;
+}
+.topbar .brand {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 21px;
+  letter-spacing: 0.02em;
+  color: var(--paper);
+  display: flex; align-items: center; gap: 8px;
+}
+.topbar-left { display: flex; align-items: center; gap: 10px; }
+.back-btn {
+  background: none; border: none; color: var(--amber);
+  font-size: 22px; line-height: 1; padding: 2px 4px 2px 0;
+  cursor: pointer;
+}
+.back-btn:active { opacity: 0.6; }
+.menu-btn {
+  background: none; border: none; color: var(--slate-light);
+  font-size: 19px; line-height: 1; padding: 2px 2px;
+  cursor: pointer; margin-left: 2px;
+}
+.menu-btn:active { opacity: 0.6; }
+.nav-menu-item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: var(--asphalt-3); border: 1px solid var(--hairline);
+  border-radius: 10px; padding: 13px 14px; margin-top: 8px;
+  color: var(--slate-light); font-size: 15px; text-align: left;
+}
+.nav-menu-item .icon { font-size: 18px; }
+.nav-menu-item:active { background: var(--asphalt); }
+.brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--amber); }
+.officer-chip {
+  font-size: 11px; color: var(--slate);
+  text-align: right; line-height: 1.3;
+}
+.officer-chip strong { color: var(--slate-light); font-weight: 600; display:block; }
+.sync-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px; color: var(--slate); margin-top: 3px; justify-content: flex-end;
+}
+.sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--curb-green); }
+.sync-dot.offline { background: var(--slate); }
+
+/* ---------- screens ---------- */
+.screen { display: none; padding: 18px; animation: fadein .15s ease; }
+.screen.active { display: block; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+.section-title {
+  font-family: var(--display);
+  font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--amber); margin: 22px 0 10px;
+}
+.section-title:first-child { margin-top: 0; }
+
+/* ---------- home / stats ---------- */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.stat-card {
+  background: var(--asphalt-2); border: 1px solid var(--hairline);
+  border-radius: var(--radius); padding: 14px;
+}
+.stat-card .num { font-family: var(--mono); font-size: 26px; color: var(--paper); }
+.stat-card .lbl { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+.scan-cta {
+  margin-top: 18px;
+  width: 100%;
+  background: var(--amber);
+  color: var(--ink);
+  border: none;
+  border-radius: var(--radius);
+  padding: 22px;
+  font-family: var(--display);
+  font-size: 19px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.scan-cta:active { background: var(--amber-dim); }
+
+.recent-list { margin-top: 22px; }
+.empty-state {
+  border: 1px dashed var(--hairline); border-radius: var(--radius);
+  padding: 26px 18px; text-align: center; color: var(--slate); font-size: 13.5px; margin-top: 10px;
+}
+
+/* ---------- citation rows (history) ---------- */
+.citation-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--asphalt-2); border: 1px solid var(--hairline);
+  border-radius: 12px; padding: 12px; margin-bottom: 8px;
+}
+.citation-row .thumb {
+  width: 44px; height: 44px; border-radius: 8px; background: var(--asphalt-3);
+  flex-shrink: 0; object-fit: cover; display:block;
+}
+.citation-row .info { flex: 1; min-width: 0; }
+.citation-row .plate { font-family: var(--mono); font-size: 15px; color: var(--paper); }
+.citation-row .meta { font-size: 11.5px; color: var(--slate); margin-top: 2px; }
+.meter-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--asphalt-2); border: 1px solid rgba(225,59,46,0.3);
+  border-radius: 12px; padding: 12px; margin-bottom: 8px;
+}
+.meter-row .info { flex: 1; min-width: 0; }
+.meter-row .plate { font-size: 14px; color: var(--paper); font-weight: 600; }
+.meter-row .meta { font-size: 11.5px; color: var(--slate); margin-top: 2px; }
+.sim-badge {
+  font-size: 9.5px; letter-spacing: 0.05em; color: var(--slate);
+  border: 1px solid var(--hairline); border-radius: 100px; padding: 2px 7px;
+  margin-left: 6px; text-transform: uppercase; vertical-align: middle;
+}
+.badge {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 3px 8px; border-radius: 100px; font-weight: 600; white-space: nowrap;
+}
+.badge.issued { background: var(--curb-green-dim); color: var(--curb-green); }
+.badge.void { background: var(--curb-red-dim); color: var(--curb-red); }
+.badge.mail { background: #173a4d; color: #5fa8d3; }
+
+/* ---------- search/filter bar ---------- */
+.search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.search-row input { flex: 1; }
+.filter-pills { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.pill {
+  background: var(--asphalt-3); border: 1px solid var(--hairline); color: var(--slate-light);
+  border-radius: 100px; padding: 6px 12px; font-size: 12.5px;
+}
+.pill.active { background: var(--amber); color: var(--ink); border-color: var(--amber); font-weight: 600; }
+
+/* ---------- draft / new citation ---------- */
+.live-scan-box {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius);
+  background: #000; overflow: hidden; border: 1px solid var(--hairline);
+}
+.live-scan-box video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.live-scan-box .scan-frame {
+  position: absolute; top: 32%; left: 15%; width: 70%; height: 35%;
+  border: 2px solid var(--amber); border-radius: 8px; opacity: 0.85;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,0.35);
+}
+.live-scan-box .scan-flash {
+  position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.live-scan-box .scan-flash.flash { opacity: 0.85; }
+.live-scan-box:not(.active) .scan-frame { opacity: 0.25; }
+.scan-status-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  font-size: 13px; color: var(--slate-light);
+}
+.zoom-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.zoom-btn {
+  background: var(--asphalt-3); border: 1px solid var(--hairline); color: var(--paper);
+  width: 32px; height: 32px; border-radius: 8px; font-size: 18px; line-height: 1;
+}
+.zoom-btn:active { background: var(--asphalt); }
+#zoom-label { font-family: var(--mono); font-size: 13px; color: var(--slate-light); min-width: 34px; text-align: center; }
+.live-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--curb-red); flex-shrink: 0;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+@keyframes pulse-dot { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(225,59,46,0.5); } 50% { opacity: 0.5; box-shadow: 0 0 0 5px rgba(225,59,46,0); } }
+.hint { font-size: 12px; color: var(--slate); line-height: 1.5; }
+.btn {
+  border: none; border-radius: 10px; padding: 13px 16px; font-size: 14.5px;
+  font-weight: 600; width: 100%; text-align: center;
+}
+.btn-amber { background: var(--amber); color: var(--ink); }
+.btn-outline { background: transparent; border: 1px solid var(--hairline); color: var(--slate-light); }
+.btn-ghost { background: transparent; color: var(--slate); font-size: 13px; padding: 8px; }
+.btn-row { display: flex; gap: 10px; margin-top: 10px; }
+.btn-row .btn { width: auto; flex: 1; }
+.btn:disabled { opacity: 0.4; }
+
+.ocr-result {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  background: var(--asphalt-3); border-radius: 10px; padding: 10px 12px;
+}
+.ocr-result input { font-family: var(--mono); font-size: 18px; letter-spacing: 0.06em; text-align: center; }
+.toggle-row { display: flex; gap: 8px; margin-top: 10px; }
+.toggle-row .pill { flex: 1; text-align: center; }
+
+.lookup-status { font-size: 12.5px; color: var(--slate); margin-top: 10px; display:flex; align-items:center; gap:6px; }
+.spinner {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--hairline); border-top-color: var(--amber);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.status-chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.status-chip { font-size: 12px; padding: 6px 10px; border-radius: 100px; font-weight: 600; }
+.status-chip.valid { background: var(--curb-green-dim); color: var(--curb-green); }
+.status-chip.expired, .status-chip.unpaid { background: var(--curb-red-dim); color: var(--curb-red); }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field-row > div { flex: 1; }
+
+.code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.code-chip {
+  background: var(--asphalt-3); border: 1px solid var(--hairline);
+  border-radius: 10px; padding: 10px; text-align: left;
+}
+.code-chip .lbl { font-size: 13px; color: var(--slate-light); display: block; }
+.code-chip .fine { font-family: var(--mono); color: var(--amber); font-size: 13px; margin-top: 4px; display: block; }
+.code-chip.selected { border-color: var(--amber); background: rgba(255,178,0,0.1); }
+
+.sticky-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  max-width: 480px; margin: 0 auto;
+  background: var(--asphalt-2); border-top: 1px solid var(--hairline);
+  padding: 12px 16px; display: flex; gap: 10px; z-index: 30;
+}
+.sticky-bar .btn { width: auto; flex: 1; }
+
+/* ---------- citation pad / ticket ticket-stub (signature element) ---------- */
+.ticket-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.ticket {
+  background: var(--paper); color: var(--ink); border-radius: 4px;
+  width: 100%; max-width: 380px; max-height: 88vh; overflow-y: auto;
+  padding: 22px 20px 24px; position: relative;
+  background-image:
+    radial-gradient(circle at 0 50%, transparent 8px, var(--paper) 8.5px),
+    radial-gradient(circle at 100% 50%, transparent 8px, var(--paper) 8.5px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.ticket::before, .ticket::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 1px;
+  background-image: repeating-linear-gradient(to bottom, var(--asphalt) 0 6px, transparent 6px 12px);
+  opacity: 0.25;
+}
+.ticket::before { left: 16px; }
+.ticket::after { right: 16px; }
+.ticket-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  border-bottom: 2px solid var(--ink); padding-bottom: 10px; margin-bottom: 12px;
+}
+.ticket-head .dept { font-family: var(--display); font-size: 16px; text-transform: uppercase; letter-spacing: 0.02em; }
+.ticket-head .num { font-family: var(--mono); font-size: 12px; color: #555; margin-top: 2px; }
+.ticket-stamp {
+  font-family: var(--display); font-size: 13px; text-transform: uppercase;
+  letter-spacing: 0.08em; border: 2px solid currentColor; border-radius: 6px;
+  padding: 3px 8px; transform: rotate(-6deg);
+}
+.ticket-stamp.issued { color: var(--curb-green-dim); }
+.ticket-stamp.void { color: var(--curb-red); }
+.ticket-stamp.paid { color: #1f7a3f; }
+.ticket-stamp.courtesy { color: #b8860b; }
+.ticket-stamp.mail { color: #2a6f97; }
+.mail-file-box { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--hairline); }
+.ticket-row { display: flex; justify-content: space-between; font-size: 13.5px; padding: 5px 0; border-bottom: 1px dashed #cfc8b4; }
+.ticket-row .k { color: #6b6453; }
+.ticket-row .v { font-family: var(--mono); font-weight: 600; text-align: right; }
+.ticket-photo { width: 100%; border-radius: 6px; margin: 12px 0; display:block; }
+.ticket-fine {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-top: 14px; padding-top: 12px; border-top: 2px solid var(--ink);
+}
+.ticket-fine .amt { font-family: var(--display); font-size: 28px; }
+.ticket-actions { display: flex; gap: 8px; margin-top: 18px; }
+.ticket-actions .btn { font-size: 13px; padding: 11px; }
+.void-note { background: var(--curb-red-dim); color: #ffd9d4; font-size: 12px; padding: 8px 10px; border-radius: 8px; margin-top: 10px; }
+.paid-note { background: #d9f2e3; color: #1f5d36; font-size: 12px; padding: 8px 10px; border-radius: 8px; margin-top: 10px; }
+.qr-pay-box, .pay-on-site-box { margin-top: 14px; padding-top: 12px; border-top: 1px dashed #cfc8b4; text-align: center; }
+.qr-pay-box #ticket-qr { display: flex; justify-content: center; margin-top: 6px; }
+.pay-on-site-box .btn-row { margin-top: 4px; }
+.pay-on-site-box .btn { font-size: 12.5px; padding: 9px 6px; }
+
+.boot-panel {
+  background: var(--asphalt-2); color: var(--slate-light);
+  border: 1px solid var(--hairline); border-radius: var(--radius);
+  width: 100%; max-width: 380px; max-height: 88vh; overflow-y: auto;
+  padding: 20px 18px 22px; position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.boot-panel h3 { font-family: var(--display); color: var(--paper); font-size: 17px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+.boot-row { display: flex; justify-content: space-between; font-size: 13.5px; padding: 6px 0; border-bottom: 1px solid var(--hairline); }
+.boot-row .k { color: var(--slate); }
+.boot-row .v { font-family: var(--mono); font-weight: 600; }
+.boot-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding-top: 10px; border-top: 2px solid var(--hairline); }
+.boot-total .amt { font-family: var(--display); font-size: 24px; color: var(--amber); }
+.close-x {
+  position: absolute; top: 10px; right: 10px; background: var(--asphalt);
+  color: var(--paper); border: none; width: 28px; height: 28px; border-radius: 50%;
+  font-size: 16px; line-height: 1; z-index: 5;
+}
+
+/* ---------- bottom tab nav ---------- */
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  max-width: 480px; margin: 0 auto;
+  display: flex; background: var(--asphalt-2); border-top: 1px solid var(--hairline);
+  z-index: 25;
+}
+.tab {
+  flex: 1; background: none; border: none; color: var(--slate);
+  padding: 10px 0 12px; font-size: 11px; display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+}
+.tab .icon { font-size: 19px; }
+.tab.active { color: var(--amber); }
+
+/* ---------- onboarding ---------- */
+.onboard {
+  min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
+  padding: 30px;
+}
+.onboard h1 {
+  font-family: var(--display); color: var(--paper); font-size: 30px; margin: 0 0 6px;
+  letter-spacing: 0.01em;
+}
+.onboard .dot { color: var(--amber); }
+.onboard p.sub { color: var(--slate); font-size: 14px; margin-bottom: 26px; line-height: 1.5; }
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+  background: var(--asphalt-3); color: var(--slate-light); border: 1px solid var(--hairline);
+  padding: 10px 16px; border-radius: 100px; font-size: 13px; z-index: 60;
+  opacity: 0; transition: opacity 0.2s;
+}
+.toast.show { opacity: 1; }
+
+/* ---------- settings ---------- */
+.settings-card {
+  background: var(--asphalt-2); border: 1px solid var(--hairline);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 14px;
+}
+.settings-card h3 {
+  font-family: var(--display); font-size: 14px; color: var(--paper);
+  margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.settings-card p.hint { font-size: 12px; color: var(--slate); margin: 4px 0 0; line-height: 1.5; }
+.code-edit-card { border-bottom: 1px solid var(--hairline); padding-bottom: 12px; margin-bottom: 12px; }
+.code-edit-card:last-child { border-bottom: none; margin-bottom: 0; }
+.code-edit-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.code-edit-row select, .code-edit-row input { margin: 0; }
+.code-edit-row button { flex-shrink: 0; background: var(--curb-red-dim); color: var(--curb-red); border: none; border-radius: 8px; width: 34px; height: 38px; }
+.code-edit-card textarea { margin-top: 6px; font-size: 13px; }
+.code-edit-card label { margin-top: 8px; margin-bottom: 4px; }
+
+@media print {
+  .tabbar, .topbar, .sticky-bar, .close-x, .ticket-actions, .pay-on-site-box, .mail-file-box, .btn-ghost { display: none !important; }
+  .qr-pay-box { border-top-color: #999; }
+  .ticket-overlay { position: static; background: #fff; padding: 0; display: block; }
+  .ticket {
+    box-shadow: none; max-height: none; width: 100%; max-width: 100%;
+    background: #fff; color: #000; background-image: none;
+  }
+  .ticket::before, .ticket::after { display: none; }
+  .ticket-stamp { transform: none; border-color: #000 !important; color: #000 !important; }
+  .ticket-head { border-bottom-color: #000; }
+  .ticket-row { border-bottom-color: #999; }
+  .ticket-row .k, .ticket-row .v, .ticket-head .dept, .ticket-head .num { color: #000 !important; }
+  .ticket-fine { border-top-color: #000; }
+  .void-note { background: #eee !important; color: #000 !important; }
+  .paid-note { background: #eee !important; color: #000 !important; }
+  body { padding-bottom: 0; }
+
+  .ticket.print-w-2 { width: 2in; max-width: 2in; font-size: 9.5px; padding: 10px 8px 12px; }
+  .ticket.print-w-3 { width: 3in; max-width: 3in; font-size: 10.5px; padding: 12px 10px 14px; }
+  .ticket.print-w-4 { width: 4in; max-width: 4in; font-size: 11.5px; padding: 14px 12px 16px; }
+  .ticket.print-w-2 .ticket-head .dept, .ticket.print-w-3 .ticket-head .dept { font-size: 14px; }
+  .ticket.print-w-2 .ticket-fine .amt, .ticket.print-w-3 .ticket-fine .amt { font-size: 20px; }
+  @page { margin: 4mm; }
+}
+</style>
+</head>
+<body>
+<!-- ============================================================
+     ONBOARDING
+     ============================================================ -->
+<div class="onboard" id="onboard-screen" style="display:none;">
+  <h1>CURBSIDE<span class="dot">.</span></h1>
+  <p class="sub">Field citation tool. Scan a plate, auto-fill the record, issue the citation — no typing the same thing twice.</p>
+  <label>Department / Agency name</label>
+  <input id="ob-dept" placeholder="e.g. City Parking Enforcement" />
+  <label>Your name</label>
+  <input id="ob-name" placeholder="Full name" />
+  <label>Badge / employee #</label>
+  <input id="ob-badge" placeholder="Badge number" />
+  <button class="btn btn-amber" style="margin-top:22px;" onclick="completeOnboarding()">Start shift</button>
+</div>
+
+<!-- ============================================================
+     APP SHELL
+     ============================================================ -->
+<div id="app-shell" style="display:none;">
+  <div id="app">
+
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="back-btn" id="back-btn" onclick="handleBack()" style="display:none;" aria-label="Back">←</button>
+        <div class="brand"><span class="dot"></span>CURBSIDE</div>
+        <button class="menu-btn" onclick="openNavMenu()" aria-label="Menu">☰</button>
+      </div>
+      <div class="officer-chip">
+        <strong id="officer-name-chip">—</strong>
+        <span id="officer-badge-chip">—</span>
+        <div class="sync-status"><span class="sync-dot" id="sync-dot"></span><span id="sync-label">Local only</span></div>
+      </div>
+    </div>
+
+    <!-- ---------------- HOME ---------------- -->
+    <div class="screen active" id="screen-home">
+      <div class="section-title">Today's shift</div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="num" id="stat-today-count">0</div><div class="lbl">Citations issued</div></div>
+        <div class="stat-card"><div class="num" id="stat-today-fines">$0</div><div class="lbl">Total fines</div></div>
+      </div>
+
+      <button class="scan-cta" onclick="startNewCitation()">📷 Scan Vehicle</button>
+
+      <div class="section-title">Recent</div>
+      <div class="recent-list" id="recent-list"></div>
+    </div>
+
+    <!-- ---------------- BOOTS ---------------- -->
+    <div class="screen" id="screen-boots">
+      <div class="section-title">Boots</div>
+      <button class="btn btn-amber" onclick="openBootCreate()">🔒 Boot a Vehicle</button>
+
+      <div class="section-title">Booted Vehicles</div>
+      <div id="booted-list"></div>
+    </div>
+
+    <!-- ---------------- METERS ---------------- -->
+    <div class="screen" id="screen-meters">
+      <div class="section-title">Expired Meters Nearby <span class="sim-badge">SIMULATED</span></div>
+      <p class="hint">Refreshes automatically. Tap Cite on any vehicle to jump straight into a pre-filled citation.</p>
+      <div id="meter-feed-list"></div>
+    </div>
+
+    <!-- ---------------- NAV MENU ---------------- -->
+    <div class="ticket-overlay" id="nav-menu-overlay" style="display:none;">
+      <div class="boot-panel">
+        <button class="close-x" onclick="closeNavMenu()">✕</button>
+        <h3>Menu</h3>
+        <button class="nav-menu-item" onclick="navigateTo('home')"><span class="icon">🏠</span> Home</button>
+        <button class="nav-menu-item" onclick="navigateTo('draft')"><span class="icon">📷</span> Scan Vehicle</button>
+        <button class="nav-menu-item" onclick="navigateTo('boots')"><span class="icon">🔒</span> Boots</button>
+        <button class="nav-menu-item" onclick="navigateTo('meters')"><span class="icon">🅿️</span> Expired Meters <span class="sim-badge">SIM</span></button>
+        <button class="nav-menu-item" onclick="navigateTo('history')"><span class="icon">📋</span> History</button>
+        <button class="nav-menu-item" onclick="navigateTo('settings')"><span class="icon">⚙️</span> Settings</button>
+      </div>
+    </div>
+
+    <!-- ---------------- BOOT OVERLAY ---------------- -->
+    <div class="ticket-overlay" id="boot-overlay" style="display:none;">
+      <div class="boot-panel">
+        <button class="close-x" onclick="closeBootOverlay()">✕</button>
+        <div id="boot-body"></div>
+      </div>
+    </div>
+
+    <!-- ---------------- NEW CITATION DRAFT ---------------- -->
+    <div class="screen" id="screen-draft">
+      <div class="section-title">1 · Capture — always scanning</div>
+      <div class="live-scan-box" id="live-scan-box">
+        <video id="live-video" playsinline muted autoplay></video>
+        <div class="scan-frame"></div>
+        <div class="scan-flash" id="scan-flash"></div>
+      </div>
+      <div class="scan-status-row">
+        <span class="live-dot"></span>
+        <span id="scan-status">Starting camera…</span>
+      </div>
+      <div class="zoom-row">
+        <button class="zoom-btn" onclick="adjustZoom(-0.5)">−</button>
+        <span id="zoom-label">1.0x</span>
+        <button class="zoom-btn" onclick="adjustZoom(0.5)">+</button>
+        <span class="hint" style="margin-left:auto;">Zoom to read plates from a distance</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" id="pause-scan-btn" onclick="toggleScanPause()">⏸ Pause</button>
+        <button class="btn btn-outline" onclick="captureAndRecognize(true)">📸 Capture Now</button>
+      </div>
+
+      <div class="ocr-result" style="display:block;margin-top:14px;">
+        <div class="toggle-row" style="margin-top:0;">
+          <button class="pill active" data-type="plate" onclick="setIdType('plate')">License Plate</button>
+          <button class="pill" data-type="vin" onclick="setIdType('vin')">VIN</button>
+        </div>
+        <input id="manual-plate" style="margin-top:10px;" placeholder="Detected plate / VIN — editable" />
+        <button class="btn btn-amber" style="margin-top:10px;" onclick="lookupVehicle()">Look Up Vehicle</button>
+        <p class="lookup-status" id="lookup-status"></p>
+        <p class="hint">Always verify the plate matches the vehicle before issuing — no scanner, human or AI, is 100% accurate.</p>
+        <p class="hint" style="margin-top:6px;">No camera available? <label style="text-decoration:underline;cursor:pointer;color:var(--amber);">Upload a photo instead<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handleCapture(event)" /></label></p>
+
+        <label style="margin-top:14px;">Or check a digital pay station directly <span class="sim-badge">SIMULATED</span></label>
+        <select id="station-check-select" onchange="checkDigitalStation(this.value)">
+          <option value="">Select a station/space…</option>
+        </select>
+      </div>
+
+      <div id="vehicle-section" style="display:none;">
+        <div class="section-title">2 · Vehicle &amp; Owner</div>
+        <div id="vehicle-fields">
+          <label>Registered owner</label>
+          <input id="f-owner" />
+
+          <label class="btn btn-outline" style="display:inline-block;margin-top:14px;">📷 Scan vehicle photo for make/model/color (AI)
+            <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="scanVehiclePhoto(event)" />
+          </label>
+          <p class="lookup-status" id="vehicle-photo-status"></p>
+
+          <div class="field-row">
+            <div>
+              <label>Make</label>
+              <select id="f-make" onchange="toggleOther(this,'f-make-other')"></select>
+              <input id="f-make-other" placeholder="Type make" style="display:none;margin-top:6px;" />
+            </div>
+            <div><label>Model</label><input id="f-model" /></div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label>Color</label>
+              <select id="f-color" onchange="toggleOther(this,'f-color-other')"></select>
+              <input id="f-color-other" placeholder="Type color" style="display:none;margin-top:6px;" />
+            </div>
+            <div><label>Plate state</label><select id="f-state"></select></div>
+          </div>
+
+          <div class="field-row">
+            <div><label>Registration status</label><select id="f-regstatus"></select></div>
+            <div><label>Reg. expires</label><input id="f-regexp" type="date" /></div>
+          </div>
+          <div class="field-row">
+            <div><label>Payment status</label><select id="f-paymentstatus"></select></div>
+            <div><label>Payment detail</label><input id="f-paymentdetail" placeholder="e.g. Paid until 4:10 PM" /></div>
+          </div>
+        </div>
+
+        <div class="section-title">3 · Violation</div>
+        <div class="filter-pills" id="fee-type-pills">
+          <button class="pill active" data-feetype="citation" onclick="setFeeType('citation')">Full Citation</button>
+          <button class="pill" data-feetype="courtesy" onclick="setFeeType('courtesy')">Courtesy Late Fee</button>
+        </div>
+        <p class="hint" id="fee-type-hint">Full fine amount applies.</p>
+
+        <div class="filter-pills" id="jurisdiction-pills">
+          <button class="pill active" data-jurisdiction="all" onclick="setJurisdiction('all')">All</button>
+          <button class="pill" data-jurisdiction="state" onclick="setJurisdiction('state')">State</button>
+          <button class="pill" data-jurisdiction="county" onclick="setJurisdiction('county')">County</button>
+          <button class="pill" data-jurisdiction="city" onclick="setJurisdiction('city')">City</button>
+        </div>
+        <select id="violation-select" onchange="onViolationChange()"></select>
+
+        <div id="remark-section" style="display:none;margin-top:10px;">
+          <label style="margin-top:0;">Common remark for this violation</label>
+          <select id="remark-select" onchange="appendRemark()"></select>
+        </div>
+
+        <div class="section-title">4 · Date, time &amp; location</div>
+        <div class="field-row">
+          <div><label>Date</label><input id="f-date" type="date" /></div>
+          <div><label>Time</label><input id="f-time" type="time" /></div>
+        </div>
+        <p class="lookup-status" id="loc-status" style="margin-top:10px;">—</p>
+        <label>Jurisdiction state (auto from GPS)</label>
+        <select id="f-loc-state"></select>
+        <label>Cross street / address (optional override)</label>
+        <input id="f-address" placeholder="e.g. 5th &amp; Main, near hydrant" />
+        <label>Notes (optional — add remarks above or type your own)</label>
+        <textarea id="f-notes" rows="2" placeholder="Anything else for the record"></textarea>
+
+        <div class="mail-file-box">
+          <p class="hint" style="margin-top:0;">Vehicle drove off before you could place the citation? Many jurisdictions allow filing it for mail to the registered owner instead of voiding — confirm this matches your department's ordinance.</p>
+          <button class="btn btn-outline" id="file-mail-btn" disabled onclick="fileForMail()">🚗💨 Vehicle Left — File for Mail Instead</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------------- HISTORY ---------------- -->
+    <div class="screen" id="screen-history">
+      <div class="section-title">History</div>
+      <div class="search-row">
+        <input id="history-search" placeholder="Search plate, VIN, citation #" oninput="renderHistory()" />
+      </div>
+      <div class="filter-pills" id="filter-pills">
+        <button class="pill" data-filter="today" onclick="setHistoryFilter('today')">Today</button>
+        <button class="pill" data-filter="all" onclick="setHistoryFilter('all')">All</button>
+        <button class="pill" data-filter="void" onclick="setHistoryFilter('void')">Voided</button>
+        <button class="pill" data-filter="mail" onclick="setHistoryFilter('mail')">Pending Mail</button>
+      </div>
+      <div id="history-list"></div>
+    </div>
+
+    <!-- ---------------- SETTINGS ---------------- -->
+    <div class="screen" id="screen-settings">
+      <div class="section-title">Officer profile</div>
+      <div class="settings-card">
+        <label>Department / agency</label>
+        <input id="s-dept" />
+        <label>Name</label>
+        <input id="s-name" />
+        <label>Badge #</label>
+        <input id="s-badge" />
+        <button class="btn btn-amber" style="margin-top:14px;" onclick="saveProfileSettings()">Save profile</button>
+      </div>
+
+      <div class="section-title">Violation codes &amp; fines</div>
+      <div class="settings-card">
+        <p class="hint">Code sections below are starter examples only — replace with your department's actual current code book before relying on them for real citations.</p>
+        <div id="code-editor"></div>
+        <button class="btn btn-outline" style="margin-top:10px;" onclick="addCode()">+ Add violation code</button>
+      </div>
+
+      <div class="section-title">Boot &amp; courtesy fees</div>
+      <div class="settings-card">
+        <h3>Default amounts</h3>
+        <p class="hint">Used to pre-fill the boot fee when booting a vehicle, and the reduced amount when issuing a Courtesy Late Fee instead of a full citation. Both are editable per-instance too.</p>
+        <label>Default boot fee ($)</label>
+        <input id="s-boot-fee" type="number" />
+        <label>Default courtesy late fee ($)</label>
+        <input id="s-courtesy-fee" type="number" />
+        <button class="btn btn-amber" style="margin-top:12px;" onclick="saveFeeSettings()">Save fee settings</button>
+      </div>
+
+      <div class="section-title">Meter feed (optional)</div>
+      <div class="settings-card">
+        <h3>Connect a real metering vendor</h3>
+        <p class="hint">The "Expired Meters Nearby" list on Home is a <strong>simulated</strong> demo feed — there's no generic public API for live meter-expiry data. A real feed comes from whichever vendor runs the meters in your city (e.g. ParkMobile, Passport, Flowbird) via their enforcement-side API, set up through a vendor/city contract. The fields below are placeholders for when that's in place.</p>
+        <label>Vendor name</label>
+        <input id="s-meter-vendor" placeholder="e.g. Passport" />
+        <label>Enforcement API endpoint</label>
+        <input id="s-meter-endpoint" placeholder="https://..." />
+        <label>API key</label>
+        <input id="s-meter-key" type="password" placeholder="Provided by the vendor" />
+        <button class="btn btn-outline" style="margin-top:12px;" onclick="saveMeterVendorSettings()">Save (not yet connected)</button>
+      </div>
+
+      <div class="section-title">AI recognition (optional)</div>
+      <div class="settings-card">
+        <h3>Connect your Anthropic API key</h3>
+        <p class="hint">Enables accurate plate reading and vehicle make/model/color recognition from photos — same bring-your-own-key pattern as your other tools. Costs apply on your own Anthropic account, typically a small fraction of a cent per scan. Without a key, the app still works using the basic on-device scanner and placeholder vehicle data.</p>
+        <label>Anthropic API key</label>
+        <input id="s-ai-key" type="password" placeholder="sk-ant-..." />
+        <label>Model</label>
+        <select id="s-ai-model">
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast &amp; low-cost (default)</option>
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — slower, more accurate</option>
+        </select>
+        <button class="btn btn-amber" style="margin-top:12px;" onclick="saveAISettings()">Save AI settings</button>
+        <p class="hint" style="margin-top:10px;">Owner name, registration validity, and payment status stay simulated regardless of this setting — those require an actual DMV/payment-vendor data agreement, not an AI model.</p>
+      </div>
+
+      <div class="section-title">Live sync (optional)</div>
+      <div class="settings-card">
+        <h3>Connect Supabase</h3>
+        <p class="hint">Mirrors every citation in real time across every officer's phone. See the SQL setup notes in the file's source comments to create the table first.</p>
+        <label>Project URL</label>
+        <input id="s-sb-url" placeholder="https://xxxx.supabase.co" />
+        <label>Anon key</label>
+        <input id="s-sb-key" placeholder="anon public key" />
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;margin-top:12px;">
+          <input type="checkbox" id="s-sb-enabled" style="width:auto;" /> Enable live sync
+        </label>
+        <button class="btn btn-amber" style="margin-top:12px;" onclick="saveSyncSettings()">Save sync settings</button>
+      </div>
+
+      <div class="section-title">Low-contact enforcement</div>
+      <div class="settings-card">
+        <h3>Stealth mode</h3>
+        <p class="hint">Disables the vibration and screen flash on a successful scan, so nothing signals a scan just happened. Build the citation from a distance, then approach only to place it.</p>
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;margin-top:10px;">
+          <input type="checkbox" id="s-stealth-mode" style="width:auto;" /> Enable stealth mode
+        </label>
+        <h3 style="margin-top:18px;">Auto-print on issue</h3>
+        <p class="hint">Automatically opens the print screen the instant a citation is issued, so the only thing left to do is walk up, place it, and leave.</p>
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;margin-top:10px;">
+          <input type="checkbox" id="s-auto-print" style="width:auto;" /> Auto-print every citation
+        </label>
+        <h3 style="margin-top:18px;">Mail filing window</h3>
+        <p class="hint">When a vehicle drives off before the citation can be placed, many jurisdictions require the citation be mailed to the registered owner within a set number of days instead of being voided — <strong>verify this is actually allowed under your department's ordinance before relying on it</strong>; some jurisdictions require physical service instead.</p>
+        <label>Mailing deadline (days from filing)</label>
+        <input id="s-mail-window" type="number" />
+        <button class="btn btn-amber" style="margin-top:14px;" onclick="saveContactSettings()">Save</button>
+      </div>
+
+      <div class="section-title">Printing</div>
+      <div class="settings-card">
+        <h3>Receipt width</h3>
+        <p class="hint">Tap Print on any citation and your device's normal print screen opens — pick whichever printer is already paired or on the same WiFi network there (this is how AirPrint and most field/receipt printers work on iPhone/iPad). This setting just controls how the receipt is laid out for that print.</p>
+        <select id="s-print-width">
+          <option value="full">Standard / full page</option>
+          <option value="print-w-2">2" thermal receipt</option>
+          <option value="print-w-3">3" thermal receipt</option>
+          <option value="print-w-4">4" thermal receipt</option>
+        </select>
+        <button class="btn btn-amber" style="margin-top:12px;" onclick="savePrintSettings()">Save print settings</button>
+      </div>
+
+      <div class="section-title">Data</div>
+      <div class="settings-card">
+        <h3>Export &amp; reset</h3>
+        <p class="hint">Citations are always saved on this device first, regardless of sync status.</p>
+        <button class="btn btn-outline" style="margin-top:10px;" onclick="exportCSV()">Export all citations (CSV)</button>
+        <button class="btn btn-outline" style="margin-top:10px;color:var(--curb-red);border-color:var(--curb-red-dim);" onclick="clearAllData()">Erase all local data</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ---------------- STICKY ACTION BAR (draft screen only) ---------------- -->
+  <div class="sticky-bar" id="draft-sticky-bar" style="display:none;">
+    <button class="btn btn-outline" onclick="haltCitation()">Halt</button>
+    <button class="btn btn-amber" id="issue-btn" disabled onclick="issueCitation()">Issue Citation</button>
+  </div>
+
+  <!-- ---------------- TICKET MODAL ---------------- -->
+  <div class="ticket-overlay" id="ticket-overlay" style="display:none;">
+    <div class="ticket">
+      <button class="close-x" onclick="closeTicket()">✕</button>
+      <div id="ticket-body"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- ---------------- TAB BAR ---------------- -->
+  <div class="tabbar">
+    <button class="tab active" data-tab="home" onclick="showScreen('home')"><span class="icon">🏠</span>Home</button>
+    <button class="tab" data-tab="draft" onclick="startNewCitation()"><span class="icon">📷</span>Scan</button>
+    <button class="tab" data-tab="history" onclick="showScreen('history')"><span class="icon">📋</span>History</button>
+    <button class="tab" data-tab="settings" onclick="showScreen('settings')"><span class="icon">⚙️</span>Settings</button>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/* ============================================================
+   CURBSIDE — Parking Enforcement Citation Tool
+   Core app logic
+   ============================================================ */
+
+const STORAGE_KEYS = {
+  profile: 'pe_profile',
+  citations: 'pe_citations',
+  codes: 'pe_violation_codes',
+  counter: 'pe_daily_counter',
+  sync: 'pe_sync_config',
+  ai: 'pe_ai_config',
+  meterFeed: 'pe_meter_feed',
+  meterVendor: 'pe_meter_vendor_config',
+  printWidth: 'pe_print_width',
+  boots: 'pe_boots',
+  courtesyFee: 'pe_courtesy_fee',
+  bootFee: 'pe_default_boot_fee',
+  stealthMode: 'pe_stealth_mode',
+  autoPrint: 'pe_auto_print',
+  mailWindow: 'pe_mail_window_days'
+};
+
+const US_STATES = [
+  ['AL','Alabama'],['AK','Alaska'],['AZ','Arizona'],['AR','Arkansas'],['CA','California'],
+  ['CO','Colorado'],['CT','Connecticut'],['DE','Delaware'],['DC','District of Columbia'],
+  ['FL','Florida'],['GA','Georgia'],['HI','Hawaii'],['ID','Idaho'],['IL','Illinois'],
+  ['IN','Indiana'],['IA','Iowa'],['KS','Kansas'],['KY','Kentucky'],['LA','Louisiana'],
+  ['ME','Maine'],['MD','Maryland'],['MA','Massachusetts'],['MI','Michigan'],['MN','Minnesota'],
+  ['MS','Mississippi'],['MO','Missouri'],['MT','Montana'],['NE','Nebraska'],['NV','Nevada'],
+  ['NH','New Hampshire'],['NJ','New Jersey'],['NM','New Mexico'],['NY','New York'],
+  ['NC','North Carolina'],['ND','North Dakota'],['OH','Ohio'],['OK','Oklahoma'],['OR','Oregon'],
+  ['PA','Pennsylvania'],['RI','Rhode Island'],['SC','South Carolina'],['SD','South Dakota'],
+  ['TN','Tennessee'],['TX','Texas'],['UT','Utah'],['VT','Vermont'],['VA','Virginia'],
+  ['WA','Washington'],['WV','West Virginia'],['WI','Wisconsin'],['WY','Wyoming']
+];
+
+const VEHICLE_COLORS = ['White','Black','Silver','Gray','Blue','Red','Green','Gold','Brown','Tan','Yellow','Orange','Purple'];
+const MAKE_MODEL_PAIRS = [
+  ['Toyota','Camry'], ['Toyota','Corolla'], ['Toyota','RAV4'],
+  ['Honda','Civic'], ['Honda','Accord'], ['Honda','CR-V'],
+  ['Ford','F-150'], ['Ford','Escape'], ['Ford','Explorer'],
+  ['Chevrolet','Malibu'], ['Chevrolet','Silverado'], ['Chevrolet','Equinox'],
+  ['Nissan','Altima'], ['Nissan','Sentra'], ['Nissan','Rogue'],
+  ['Hyundai','Elantra'], ['Hyundai','Sonata'], ['Hyundai','Tucson'],
+  ['Kia','Sportage'], ['Kia','Soul'], ['Kia','Optima'],
+  ['Jeep','Wrangler'], ['Jeep','Grand Cherokee'],
+  ['Subaru','Outback'], ['Subaru','Forester'],
+  ['BMW','3 Series'], ['BMW','X3'],
+  ['Mercedes-Benz','C-Class'], ['Mercedes-Benz','GLC'],
+  ['Tesla','Model 3'], ['Tesla','Model Y'],
+  ['Dodge','Charger'], ['Dodge','Durango'],
+  ['GMC','Sierra'], ['GMC','Terrain'],
+  ['Volkswagen','Jetta'], ['Volkswagen','Tiguan'],
+  ['Mazda','CX-5'], ['Mazda','3'],
+  ['Lexus','RX'], ['Lexus','ES'],
+  ['Audi','A4'], ['Audi','Q5']
+];
+const VEHICLE_MAKES = Array.from(new Set(MAKE_MODEL_PAIRS.map(function (p) { return p[0]; })));
+const REG_STATUS_OPTIONS = ['valid','expired','suspended','not on file'];
+const PAYMENT_STATUS_OPTIONS = ['paid','unpaid','expired','no payment system'];
+const JURISDICTIONS = ['state','county','city'];
+
+/**
+ * Starter violation codes — EXAMPLE placeholders only. Code section numbers
+ * are illustrative, not verified against any current code book. Replace
+ * these in Settings with your department's actual current sections before
+ * relying on them for real citations.
+ */
+const DEFAULT_CODES = [
+  { id: 'c1', jurisdiction: 'city', code: 'Mun. Code §80.69.4', label: 'Street Cleaning Zone', fine: 73,
+    remarks: ['Posted street-cleaning sign visible at time of citation', 'Vehicle present during posted cleaning window', 'No cleaning equipment present but signage in effect'] },
+  { id: 'c2', jurisdiction: 'city', code: 'Mun. Code §80.58', label: 'No Valid Payment / Expired Meter', fine: 58,
+    remarks: ['No active payment session found at time of check', 'Meter display read "EXPIRED"', 'App-based session confirmed expired before citation issued'] },
+  { id: 'c3', jurisdiction: 'state', code: 'Veh. Code §5204(a)', label: 'Expired Registration', fine: 98,
+    remarks: ['Registration tag expired per displayed sticker', 'No current registration tag displayed', 'Registration confirmed expired via lookup'] },
+  { id: 'c4', jurisdiction: 'state', code: 'Veh. Code §22507.8(a)', label: 'Disabled Zone Violation', fine: 363,
+    remarks: ['No disabled placard or plate displayed', 'Placard displayed did not match vehicle on file', 'Vehicle occupying marked accessible space without permit'] },
+  { id: 'c5', jurisdiction: 'state', code: 'Veh. Code §22500(e)', label: 'Blocking Driveway', fine: 110,
+    remarks: ['Vehicle fully blocking private driveway', 'Resident reported inability to exit driveway', 'Waited 10+ minutes, owner not present'] },
+  { id: 'c6', jurisdiction: 'state', code: 'Veh. Code §22500.1', label: 'Blocking Fire Lane / Hydrant', fine: 363,
+    remarks: ['Vehicle within marked fire lane', 'Vehicle within 15 ft of hydrant', 'Red curb clearly visible and unobstructed by debris'] },
+  { id: 'c7', jurisdiction: 'county', code: 'County Code §10.04', label: 'No Permit Displayed (Permit Zone)', fine: 75,
+    remarks: ['No residential permit visible on dash', 'Permit displayed expired', 'Vehicle not on resident permit list for this block'] },
+  { id: 'c8', jurisdiction: 'city', code: 'Mun. Code §80.54', label: 'Double Parked', fine: 110,
+    remarks: ['Vehicle blocking a marked travel lane', 'Vehicle double-parked alongside legally parked vehicle', 'Hazard observed to passing traffic'] }
+];
+
+// ---------- tiny deterministic PRNG so the same plate/VIN always
+// returns the same mock "record" (simulates a persistent DMV lookup) ----------
+function hashString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  }
+  return h >>> 0;
+}
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+
+const FIRST_NAMES = ['James','Maria','Robert','Linda','Michael','Patricia','David','Jennifer','Carlos','Aisha','Wei','Sofia','Daniel','Angela','Marcus','Priya'];
+const LAST_NAMES = ['Reyes','Johnson','Nguyen','Garcia','Williams','Brown','Davis','Martinez','Patel','Kim','Thompson','Hassan','Lee','Clark','Diaz'];
+
+/**
+ * MOCK LOOKUP — stands in for a real DMV / LPR vendor / parking-payment API.
+ * Same input always produces the same "record" so repeat scans feel real.
+ * Replace this function with a real fetch() call once you have a licensed
+ * data source (see notes near the bottom of this file).
+ */
+function mockVehicleLookup(plateOrVin) {
+  const seed = hashString(plateOrVin.toUpperCase().trim());
+  const rng = mulberry32(seed);
+  const makeModel = pick(rng, MAKE_MODEL_PAIRS);
+
+  const regValid = rng() > 0.3; // ~70% valid, rest expired
+  const today = new Date();
+  const regExpiry = new Date(today);
+  regExpiry.setMonth(today.getMonth() + (regValid ? Math.ceil(rng() * 11) + 1 : -Math.ceil(rng() * 6) - 1));
+
+  const paymentStatus = pick(rng, ['paid', 'unpaid', 'expired']);
+  let paymentDetail = '';
+  const now = new Date();
+  if (paymentStatus === 'paid') {
+    const until = new Date(now.getTime() + Math.ceil(rng() * 180) * 60000);
+    paymentDetail = 'Paid until ' + until.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (paymentStatus === 'expired') {
+    const expired = new Date(now.getTime() - Math.ceil(rng() * 90) * 60000);
+    paymentDetail = 'Expired at ' + expired.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else {
+    paymentDetail = 'No active session found';
+  }
+
+  return {
+    ownerName: pick(rng, FIRST_NAMES) + ' ' + pick(rng, LAST_NAMES),
+    state: pick(rng, US_STATES)[0],
+    vehicleMake: makeModel[0],
+    vehicleModel: makeModel[1],
+    vehicleColor: pick(rng, VEHICLE_COLORS),
+    regStatus: regValid ? 'valid' : 'expired',
+    regExpiry: regExpiry.toISOString().slice(0, 10),
+    paymentStatus: paymentStatus,
+    paymentDetail: paymentDetail
+  };
+}
+
+/* ------------------------------------------------------------
+ * SIMULATED "expired meters nearby" feed.
+ *
+ * This is a demo/prototype stand-in for what a real metering/payment
+ * vendor's enforcement API would provide — e.g. ParkMobile, Passport, or
+ * Flowbird's enforcement-side endpoints, which a city contracts for
+ * directly. There is no generic public API for "tell me which paid
+ * spaces just expired"; it only exists behind a vendor relationship.
+ * See getMeterVendorConfig() below for where real credentials would go.
+ * ------------------------------------------------------------ */
+const METER_LOCATIONS = [
+  '400 Block Main St — Space 4', '400 Block Main St — Space 7',
+  '5th & Oak — Space 2', '5th & Oak — Space 5',
+  '12th St Lot — Space 14', '12th St Lot — Space 21',
+  'Courthouse Sq — Space 1', 'Courthouse Sq — Space 9',
+  'Riverside Ave — Space 3', 'Riverside Ave — Space 11'
+];
+const METER_FEED_TARGET_SIZE = 8;
+const METER_LOOKAHEAD_MS = 18 * 60000; // new entries expire 0–18 min from now
+
+function generateMeterEntry() {
+  const plate = randomPlateLike();
+  const vehicle = mockVehicleLookup(plate);
+  const offsetMs = Math.floor((Math.random() * 2 - 0.4) * METER_LOOKAHEAD_MS); // skew toward upcoming, some already past
+  const expiresAt = new Date(Date.now() + offsetMs).toISOString();
+  return {
+    id: 'm_' + Date.now() + '_' + Math.floor(Math.random() * 100000),
+    plate: plate,
+    ownerName: vehicle.ownerName,
+    vehicleMake: vehicle.vehicleMake,
+    vehicleModel: vehicle.vehicleModel,
+    vehicleColor: vehicle.vehicleColor,
+    state: vehicle.state,
+    regStatus: vehicle.regStatus,
+    regExpiry: vehicle.regExpiry,
+    location: METER_LOCATIONS[Math.floor(Math.random() * METER_LOCATIONS.length)],
+    expiresAt: expiresAt,
+    citing: false
+  };
+}
+function randomPlateLike() {
+  const letters = 'ABCDEFGHJKLMNPRSTUVWXYZ';
+  const pickChar = function (s) { return s[Math.floor(Math.random() * s.length)]; };
+  return String(Math.floor(Math.random() * 9) + 1)
+    + pickChar(letters) + pickChar(letters) + pickChar(letters)
+    + String(Math.floor(Math.random() * 9000) + 1000);
+}
+
+function getMeterFeed() {
+  let feed = loadJSON(STORAGE_KEYS.meterFeed, null);
+  if (!feed || feed.length === 0) {
+    feed = [];
+    for (let i = 0; i < METER_FEED_TARGET_SIZE; i++) feed.push(generateMeterEntry());
+    saveJSON(STORAGE_KEYS.meterFeed, feed);
+  }
+  return feed;
+}
+function saveMeterFeed(feed) { saveJSON(STORAGE_KEYS.meterFeed, feed); }
+
+/** Tops the feed back up toward its target size with fresh simulated sessions. */
+function refreshMeterFeed() {
+  let feed = getMeterFeed();
+  const active = feed.length;
+  for (let i = active; i < METER_FEED_TARGET_SIZE; i++) feed.push(generateMeterEntry());
+  saveMeterFeed(feed);
+  return feed;
+}
+function getExpiredMeterEntries() {
+  const feed = getMeterFeed();
+  const now = Date.now();
+  return feed
+    .filter(function (e) { return !e.citing && new Date(e.expiresAt).getTime() <= now; })
+    .sort(function (a, b) { return new Date(a.expiresAt) - new Date(b.expiresAt); });
+}
+/** Marks an entry as being handled so it drops out of the feed once cited. */
+function markMeterEntryCiting(entryId) {
+  const feed = getMeterFeed();
+  const entry = feed.find(function (e) { return e.id === entryId; });
+  if (entry) entry.citing = true;
+  saveMeterFeed(feed);
+  return entry;
+}
+function removeMeterEntry(entryId) {
+  let feed = getMeterFeed();
+  feed = feed.filter(function (e) { return e.id !== entryId; });
+  saveMeterFeed(feed);
+}
+
+/** Computes a session's current paid/expired status live from its expiry time. */
+function sessionPaymentStatus(entry) {
+  const now = Date.now();
+  const expiresAt = new Date(entry.expiresAt);
+  if (expiresAt.getTime() > now) {
+    return { status: 'paid', detail: 'Paid until ' + expiresAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+  }
+  return { status: 'expired', detail: 'Expired at ' + expiresAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+}
+
+/**
+ * One-tap "check this digital station" lookup — unlike the passive expired
+ * feed, this works for ANY known station/space, paid or not, so an officer
+ * standing at a specific kiosk can check it directly rather than waiting
+ * for it to surface as already-expired. Simulated, same as the rest of
+ * the meter feed — see getMeterVendorConfig() for the real integration point.
+ */
+function getOrCreateStationSession(location) {
+  const feed = getMeterFeed();
+  let entry = feed.find(function (e) { return e.location === location && !e.citing; });
+  if (!entry) {
+    entry = generateMeterEntry();
+    entry.location = location;
+    feed.push(entry);
+    saveMeterFeed(feed);
+  }
+  return entry;
+}
+
+function getMeterVendorConfig() { return loadJSON(STORAGE_KEYS.meterVendor, { vendor: '', endpoint: '', apiKey: '', connected: false }); }
+function saveMeterVendorConfig(cfg) { saveJSON(STORAGE_KEYS.meterVendor, cfg); }
+
+function getPrintWidth() { return loadJSON(STORAGE_KEYS.printWidth, 'full'); }
+function savePrintWidth(v) { saveJSON(STORAGE_KEYS.printWidth, v); }
+
+/* ------------------------------------------------------------
+ * Boot (vehicle immobilization) records — a separate workflow from
+ * regular citations. A boot is placed when a vehicle has enough unpaid
+ * citations (or a serious enough violation) to warrant immobilization;
+ * it's released once the outstanding balance + boot fee is paid.
+ * ------------------------------------------------------------ */
+function getBoots() { return loadJSON(STORAGE_KEYS.boots, []); }
+function saveBoots(list) { saveJSON(STORAGE_KEYS.boots, list); }
+
+/** Sum of unpaid, non-voided citation fines for a given plate. */
+function getOutstandingBalance(plate) {
+  const all = getCitations();
+  return all
+    .filter(function (c) { return c.plate && c.plate.toUpperCase() === plate.toUpperCase() && c.status !== 'void' && !c.paymentReceived; })
+    .reduce(function (sum, c) { return sum + Number(c.fineAmount || 0); }, 0);
+}
+function getUnpaidCitationsForPlate(plate) {
+  const all = getCitations();
+  return all.filter(function (c) { return c.plate && c.plate.toUpperCase() === plate.toUpperCase() && c.status !== 'void' && !c.paymentReceived; });
+}
+function getActiveBootForPlate(plate) {
+  const boots = getBoots();
+  return boots.find(function (b) { return b.plate.toUpperCase() === plate.toUpperCase() && b.status === 'booted'; }) || null;
+}
+function createBoot(boot) {
+  const boots = getBoots();
+  boots.push(boot);
+  saveBoots(boots);
+  return boot;
+}
+function releaseBoot(bootId, releaseInfo) {
+  const boots = getBoots();
+  const boot = boots.find(function (b) { return b.id === bootId; });
+  if (!boot) return null;
+  boot.status = 'released';
+  boot.releasedAt = new Date().toISOString();
+  boot.releaseOfficer = releaseInfo.officer;
+  boot.releasePaymentMethod = releaseInfo.method;
+  boot.releasePaymentAmount = releaseInfo.amount;
+  saveBoots(boots);
+  return boot;
+}
+function getActiveBoots() {
+  return getBoots().filter(function (b) { return b.status === 'booted'; });
+}
+
+function getCourtesyFee() { return loadJSON(STORAGE_KEYS.courtesyFee, 15); }
+function saveCourtesyFee(amount) { saveJSON(STORAGE_KEYS.courtesyFee, Number(amount) || 15); }
+function getDefaultBootFee() { return loadJSON(STORAGE_KEYS.bootFee, 75); }
+function saveDefaultBootFee(amount) { saveJSON(STORAGE_KEYS.bootFee, Number(amount) || 75); }
+function getStealthMode() { return loadJSON(STORAGE_KEYS.stealthMode, false); }
+function saveStealthMode(v) { saveJSON(STORAGE_KEYS.stealthMode, !!v); }
+function getAutoPrint() { return loadJSON(STORAGE_KEYS.autoPrint, false); }
+function saveAutoPrint(v) { saveJSON(STORAGE_KEYS.autoPrint, !!v); }
+function getMailWindowDays() { return loadJSON(STORAGE_KEYS.mailWindow, 15); }
+function saveMailWindowDays(v) { saveJSON(STORAGE_KEYS.mailWindow, Number(v) || 15); }
+
+/**
+ * GPS-assisted jurisdiction state lookup using the free, keyless US Census
+ * Bureau geocoder. Best-effort only: if it fails or the device is outside
+ * the US, the officer just picks the state manually from the dropdown.
+ */
+/**
+ * Loads a JSONP endpoint via a dynamically injected <script> tag — script
+ * loads aren't subject to CORS the way fetch()/XHR are, which matters here
+ * because the Census geocoder's JSON format doesn't reliably support direct
+ * browser-side fetch calls.
+ */
+function jsonpRequest(url) {
+  return new Promise(function (resolve) {
+    const callbackName = '__jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+    let finished = false;
+    const script = document.createElement('script');
+    const cleanup = function () {
+      try { delete window[callbackName]; } catch (e) { window[callbackName] = undefined; }
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+    window[callbackName] = function (data) {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      resolve(data);
+    };
+    script.src = url + (url.indexOf('?') > -1 ? '&' : '?') + 'callback=' + callbackName;
+    script.onerror = function () {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      resolve(null);
+    };
+    document.head.appendChild(script);
+    setTimeout(function () {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      resolve(null);
+    }, 6000);
+  });
+}
+
+async function reverseGeocodeState(lat, lng) {
+  try {
+    const url = 'https://geocoding.geo.census.gov/geocoder/geographies/coordinates'
+      + '?x=' + encodeURIComponent(lng) + '&y=' + encodeURIComponent(lat)
+      + '&benchmark=4&vintage=4&layers=states&format=jsonp';
+    const data = await jsonpRequest(url);
+    const states = data && data.result && data.result.geographies && data.result.geographies['States'];
+    if (states && states[0] && states[0].STUSPS) return states[0].STUSPS;
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ---------- storage helpers ----------
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+function saveJSON(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getProfile() { return loadJSON(STORAGE_KEYS.profile, null); }
+function saveProfile(p) { saveJSON(STORAGE_KEYS.profile, p); }
+
+function getCodes() {
+  let codes = loadJSON(STORAGE_KEYS.codes, null);
+  if (!codes) { codes = DEFAULT_CODES.slice(); saveJSON(STORAGE_KEYS.codes, codes); }
+  return codes;
+}
+function saveCodes(codes) { saveJSON(STORAGE_KEYS.codes, codes); }
+
+function getCitations() { return loadJSON(STORAGE_KEYS.citations, []); }
+function saveCitations(list) { saveJSON(STORAGE_KEYS.citations, list); }
+
+function getSyncConfig() { return loadJSON(STORAGE_KEYS.sync, { url: '', key: '', enabled: false }); }
+function saveSyncConfig(cfg) { saveJSON(STORAGE_KEYS.sync, cfg); }
+
+function getAIConfig() { return loadJSON(STORAGE_KEYS.ai, { apiKey: '', model: 'claude-haiku-4-5-20251001' }); }
+function saveAIConfig(cfg) { saveJSON(STORAGE_KEYS.ai, cfg); }
+
+function stripDataUrlPrefix(dataUrl) {
+  const idx = dataUrl.indexOf(',');
+  return idx >= 0 ? dataUrl.slice(idx + 1) : dataUrl;
+}
+
+const PLATE_VISION_PROMPT = 'You are reading a vehicle license plate in this photo for a parking citation app. Look carefully and respond with ONLY raw JSON, no markdown formatting, no extra commentary: {"plate": "<characters only: uppercase letters and digits, no spaces, dashes, or state name>"}. If no plate is clearly visible or you cannot read it confidently, respond exactly {"plate": null}.';
+const VEHICLE_VISION_PROMPT = 'You are looking at a photo of a parked vehicle for a parking citation app. Identify it as best you can. Respond with ONLY raw JSON, no markdown: {"make": "<manufacturer, or null if unsure>", "model": "<model, or null if unsure>", "color": "<color, or null if unsure>"}. Use null rather than guessing if you are not reasonably confident about a field.';
+
+/**
+ * BYOK Claude vision call — same direct-browser-access pattern used across
+ * the rest of your tools. Requires the officer's own Anthropic API key,
+ * entered in Settings. Returns parsed JSON on success, or null on any
+ * failure (missing key, network error, bad/unparseable response) so
+ * callers can cleanly fall back to local OCR or manual entry.
+ */
+async function callClaudeVision(base64Data, mediaType, promptText) {
+  const cfg = getAIConfig();
+  if (!cfg.apiKey) return null;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': cfg.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: cfg.model || 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+            { type: 'text', text: promptText }
+          ]
+        }]
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const textBlocks = (data.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; });
+    const raw = textBlocks.join('\n').replace(/```json|```/g, '').trim();
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+function nextCitationNumber(deptInitials) {
+  const today = new Date();
+  const dayKey = today.toISOString().slice(0, 10).replace(/-/g, '');
+  let counter = loadJSON(STORAGE_KEYS.counter, { day: dayKey, seq: 0 });
+  if (counter.day !== dayKey) counter = { day: dayKey, seq: 0 };
+  counter.seq += 1;
+  saveJSON(STORAGE_KEYS.counter, counter);
+  const seqStr = String(counter.seq).padStart(4, '0');
+  const initials = (deptInitials || 'CIT').toUpperCase();
+  return initials + '-' + dayKey + '-' + seqStr;
+}
+
+function priorCitationCount(plate) {
+  const list = getCitations();
+  return list.filter(function (c) {
+    return c.plate && c.plate.toUpperCase() === plate.toUpperCase() && c.status !== 'void';
+  }).length;
+}
+
+/**
+ * Best-effort real-time sync to Supabase. If not configured, this silently
+ * no-ops and the record simply stays local (still fully usable offline).
+ * To enable: create a Supabase project, run the SQL in the comment at the
+ * bottom of this file, then paste your project URL + anon key into Settings.
+ */
+async function syncToSupabase(citation, action) {
+  const cfg = getSyncConfig();
+  if (!cfg.enabled || !cfg.url || !cfg.key) {
+    return { ok: false, reason: 'not_configured' };
+  }
+  try {
+    const base = cfg.url.replace(/\/$/, '') + '/rest/v1/citations';
+    const headers = {
+      'apikey': cfg.key,
+      'Authorization': 'Bearer ' + cfg.key,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    };
+    if (action === 'insert') {
+      await fetch(base, { method: 'POST', headers: headers, body: JSON.stringify(citation) });
+    } else if (action === 'update') {
+      await fetch(base + '?id=eq.' + encodeURIComponent(citation.id), {
+        method: 'PATCH', headers: headers, body: JSON.stringify(citation)
+      });
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: 'network_error' };
+  }
+}
+
+/* ------------------------------------------------------------
+SUPABASE SCHEMA (run once in the Supabase SQL editor):
+
+create table citations (
+  id text primary key,
+  citation_number text,
+  plate text,
+  vin text,
+  id_type text,
+  state text,
+  owner_name text,
+  vehicle_make text,
+  vehicle_model text,
+  vehicle_color text,
+  reg_status text,
+  reg_expiry text,
+  payment_status text,
+  payment_detail text,
+  violation_code_id text,
+  violation_code text,
+  violation_label text,
+  violation_jurisdiction text,
+  fine_amount numeric,
+  lat double precision,
+  lng double precision,
+  loc_state text,
+  address_note text,
+  notes text,
+  officer_name text,
+  officer_badge text,
+  department text,
+  issued_at text,
+  status text,
+  void_reason text,
+  void_at text,
+  prior_count integer
+);
+alter table citations enable row level security;
+create policy "allow all for anon key" on citations for all using (true) with check (true);
+
+Note: "allow all" is fine for a single-department prototype using one shared
+anon key. For real multi-officer production use, switch to authenticated
+officer logins and row-level policies scoped per department.
+------------------------------------------------------------ */
+
+if (typeof module !== 'undefined') {
+  module.exports = {
+    hashString, mulberry32, mockVehicleLookup, reverseGeocodeState, jsonpRequest, nextCitationNumber,
+    priorCitationCount, getCitations, saveCitations, getCodes, saveCodes,
+    getProfile, saveProfile, getSyncConfig, saveSyncConfig, syncToSupabase,
+    getAIConfig, saveAIConfig, callClaudeVision, stripDataUrlPrefix,
+    PLATE_VISION_PROMPT, VEHICLE_VISION_PROMPT,
+    generateMeterEntry, randomPlateLike, getMeterFeed, saveMeterFeed, refreshMeterFeed,
+    getExpiredMeterEntries, markMeterEntryCiting, removeMeterEntry, sessionPaymentStatus, getOrCreateStationSession,
+    getMeterVendorConfig, saveMeterVendorConfig, METER_LOCATIONS, getPrintWidth, savePrintWidth,
+    getBoots, saveBoots, getOutstandingBalance, getUnpaidCitationsForPlate, getActiveBootForPlate,
+    createBoot, releaseBoot, getActiveBoots, getCourtesyFee, saveCourtesyFee, getDefaultBootFee, saveDefaultBootFee,
+    getStealthMode, saveStealthMode, getAutoPrint, saveAutoPrint, getMailWindowDays, saveMailWindowDays,
+    US_STATES, VEHICLE_COLORS, VEHICLE_MAKES, REG_STATUS_OPTIONS, PAYMENT_STATUS_OPTIONS, JURISDICTIONS
+  };
+}
+
+/* ============================================================
+   CURBSIDE — UI wiring
+   ============================================================ */
+
+let draft = null; // current in-progress citation (Halt clears this)
+let activeFilter = 'today';
+let activeJurisdiction = 'all';
+let activeTicketId = null;
+
+// ---- live scanning state ("always awake" ALPR-style capture) ----
+let liveStream = null;
+let scanInterval = null;
+let scanBusy = false;
+let scanPaused = false;
+let lastHitPlate = null;
+let lastHitTime = 0;
+const SCAN_INTERVAL_MS = 2200;
+const HIT_COOLDOWN_MS = 8000;
+const MIN_PLATE_LEN = 4;
+const MAX_PLATE_LEN = 8;
+let zoomLevel = parseFloat(localStorage.getItem('pe_zoom_level')) || 1;
+let hardwareZoomSupported = false;
+let liveVideoTrack = null;
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+}
+
+function showScreen(name) {
+  if (name !== 'draft') stopLiveScan();
+  document.querySelectorAll('.screen').forEach(function (s) { s.classList.remove('active'); });
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelectorAll('.tab').forEach(function (t) {
+    t.classList.toggle('active', t.dataset.tab === name);
+  });
+  document.querySelector('.tabbar').style.display = (name === 'draft') ? 'none' : 'flex';
+  document.getElementById('draft-sticky-bar').style.display = (name === 'draft') ? 'flex' : 'none';
+  document.getElementById('back-btn').style.display = (name === 'home') ? 'none' : 'inline-block';
+
+  if (name === 'home') renderHome();
+  if (name === 'history') renderHistory();
+  if (name === 'settings') renderSettings();
+  if (name === 'boots') renderBootedList();
+  if (name === 'meters') renderMeterFeed();
+}
+function handleBack() {
+  const onDraft = document.getElementById('screen-draft').classList.contains('active');
+  if (onDraft) { haltCitation(); return; }
+  showScreen('home');
+}
+function openNavMenu() { document.getElementById('nav-menu-overlay').style.display = 'flex'; }
+function closeNavMenu() { document.getElementById('nav-menu-overlay').style.display = 'none'; }
+function navigateTo(name) {
+  closeNavMenu();
+  if (name === 'draft') { startNewCitation(); return; }
+  showScreen(name);
+}
+
+/* ---------------- small select helpers ---------------- */
+function fillSelect(selectEl, options, placeholder) {
+  selectEl.innerHTML = '';
+  if (placeholder) {
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = placeholder; ph.disabled = false;
+    selectEl.appendChild(ph);
+  }
+  options.forEach(function (opt) {
+    const value = Array.isArray(opt) ? opt[0] : opt;
+    const label = Array.isArray(opt) ? opt[1] : opt;
+    const o = document.createElement('option');
+    o.value = value; o.textContent = label;
+    selectEl.appendChild(o);
+  });
+}
+function toggleOther(selectEl, otherInputId) {
+  const otherInput = document.getElementById(otherInputId);
+  if (selectEl.value === '__other__') {
+    otherInput.style.display = 'block';
+    otherInput.focus();
+  } else {
+    otherInput.style.display = 'none';
+  }
+}
+function selectOrOther(selectEl, otherInputId) {
+  if (selectEl.value === '__other__') {
+    const v = document.getElementById(otherInputId).value.trim();
+    return v;
+  }
+  return selectEl.value;
+}
+
+/* ---------------- ONBOARDING ---------------- */
+function initOnboarding() {
+  const profile = getProfile();
+  if (profile) {
+    document.getElementById('app-shell').style.display = 'block';
+    document.getElementById('onboard-screen').style.display = 'none';
+    boot();
+  } else {
+    document.getElementById('app-shell').style.display = 'none';
+    document.getElementById('onboard-screen').style.display = 'flex';
+  }
+}
+function completeOnboarding() {
+  const dept = document.getElementById('ob-dept').value.trim() || 'City Parking Enforcement';
+  const name = document.getElementById('ob-name').value.trim();
+  const badge = document.getElementById('ob-badge').value.trim();
+  if (!name || !badge) { showToast('Enter your name and badge number'); return; }
+  saveProfile({ department: dept, name: name, badge: badge });
+  document.getElementById('app-shell').style.display = 'block';
+  document.getElementById('onboard-screen').style.display = 'none';
+  boot();
+}
+
+function boot() {
+  const profile = getProfile();
+  document.getElementById('officer-name-chip').textContent = profile.name;
+  document.getElementById('officer-badge-chip').textContent = 'Badge ' + profile.badge + ' · ' + profile.department;
+  updateSyncDot();
+  showScreen('home');
+  setInterval(updateSyncDot, 8000);
+  refreshMeterFeed();
+  setInterval(function () {
+    refreshMeterFeed();
+    if (document.getElementById('screen-meters').classList.contains('active')) renderMeterFeed();
+  }, 20000);
+}
+
+function updateSyncDot() {
+  const cfg = getSyncConfig();
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  if (cfg.enabled && cfg.url && cfg.key) {
+    dot.classList.remove('offline');
+    label.textContent = 'Live sync on';
+  } else {
+    dot.classList.add('offline');
+    label.textContent = 'Local only';
+  }
+}
+
+/* ---------------- HOME ---------------- */
+function renderHome() {
+  const all = getCitations();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const today = all.filter(function (c) { return c.issuedAt.slice(0, 10) === todayStr && c.status !== 'void'; });
+  const totalFines = today.reduce(function (sum, c) { return sum + Number(c.fineAmount || 0); }, 0);
+
+  document.getElementById('stat-today-count').textContent = today.length;
+  document.getElementById('stat-today-fines').textContent = '$' + totalFines.toFixed(0);
+
+  const recent = all.slice().sort(function (a, b) { return new Date(b.issuedAt) - new Date(a.issuedAt); }).slice(0, 5);
+  const list = document.getElementById('recent-list');
+  list.innerHTML = '';
+  if (recent.length === 0) {
+    list.innerHTML = '<div class="empty-state">No citations yet today. Tap Scan Vehicle to start.</div>';
+    return;
+  }
+  recent.forEach(function (c) { list.appendChild(buildCitationRow(c)); });
+}
+
+function renderMeterFeed() {
+  const list = document.getElementById('meter-feed-list');
+  if (!list) return;
+  const entries = getExpiredMeterEntries();
+  list.innerHTML = '';
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="empty-state">No expired meters right now.</div>';
+    return;
+  }
+  entries.forEach(function (e) {
+    const minsAgo = Math.max(0, Math.round((Date.now() - new Date(e.expiresAt).getTime()) / 60000));
+    const row = document.createElement('div');
+    row.className = 'meter-row';
+    row.innerHTML =
+      '<div class="info">' +
+        '<div class="plate">' + escapeHtml(e.vehicleColor) + ' ' + escapeHtml(e.vehicleMake) + ' ' + escapeHtml(e.vehicleModel) + '</div>' +
+        '<div class="meta">' + escapeHtml(e.location) + ' · Plate ' + escapeHtml(e.plate) + ' · Expired ' + minsAgo + ' min ago</div>' +
+      '</div>' +
+      '<button class="btn btn-amber" style="width:auto;padding:8px 14px;font-size:13px;">Cite</button>';
+    row.querySelector('button').onclick = function () { citeMeterEntry(e.id); };
+    list.appendChild(row);
+  });
+}
+
+function citeMeterEntry(entryId) {
+  const entry = markMeterEntryCiting(entryId);
+  if (!entry) return;
+  startNewCitation();
+  setTimeout(function () {
+    if (!draft) return;
+    const pay = sessionPaymentStatus(entry);
+    draft.plate = entry.plate;
+    draft.vin = '';
+    draft.idType = 'plate';
+    draft.ownerName = entry.ownerName;
+    draft.vehicleMake = entry.vehicleMake;
+    draft.vehicleModel = entry.vehicleModel;
+    draft.vehicleColor = entry.vehicleColor;
+    draft.state = entry.state;
+    draft.regStatus = entry.regStatus;
+    draft.regExpiry = entry.regExpiry;
+    draft.paymentStatus = pay.status;
+    draft.paymentDetail = pay.detail + ' (meter feed)';
+    draft.addressNote = entry.location;
+    draft.priorCount = priorCitationCount(entry.plate);
+
+    document.getElementById('manual-plate').value = entry.plate;
+    document.getElementById('vehicle-section').style.display = 'block';
+    document.getElementById('vehicle-fields').style.display = 'block';
+    fillVehicleFields(draft);
+    document.getElementById('f-address').value = entry.location;
+    updateScanStatus('Pre-filled from meter feed — confirm the vehicle and scan for an evidence photo');
+
+    const codes = getCodes();
+    const match = codes.find(function (c) { return /expired meter|no valid payment/i.test(c.label); });
+    if (match) {
+      document.getElementById('violation-select').value = match.id;
+      onViolationChange();
+    }
+    checkIssueReady();
+  }, 50);
+}
+
+/**
+ * One-tap "check digital station" — for an officer standing at a known
+ * space/kiosk rather than scanning a plate. Works whether or not the
+ * session is currently expired; only nudges toward a violation code if
+ * it actually is.
+ */
+function checkDigitalStation(location) {
+  if (!location) return;
+  if (!draft) startNewCitation();
+  const session = getOrCreateStationSession(location);
+  const pay = sessionPaymentStatus(session);
+
+  setTimeout(function () {
+    if (!draft) return;
+    draft.plate = session.plate;
+    draft.vin = '';
+    draft.idType = 'plate';
+    draft.ownerName = session.ownerName;
+    draft.vehicleMake = session.vehicleMake;
+    draft.vehicleModel = session.vehicleModel;
+    draft.vehicleColor = session.vehicleColor;
+    draft.state = session.state;
+    draft.regStatus = session.regStatus;
+    draft.regExpiry = session.regExpiry;
+    draft.paymentStatus = pay.status;
+    draft.paymentDetail = pay.detail + ' (digital station)';
+    draft.addressNote = location;
+
+    document.getElementById('manual-plate').value = session.plate;
+    document.getElementById('vehicle-section').style.display = 'block';
+    document.getElementById('vehicle-fields').style.display = 'block';
+    fillVehicleFields(draft);
+    document.getElementById('f-address').value = location;
+
+    if (pay.status === 'expired') {
+      updateScanStatus('Station check: ' + pay.detail + ' — violation found, confirm vehicle visually');
+      const codes = getCodes();
+      const match = codes.find(function (c) { return /expired meter|no valid payment/i.test(c.label); });
+      if (match) { document.getElementById('violation-select').value = match.id; onViolationChange(); }
+    } else {
+      updateScanStatus('Station check: ' + pay.detail + ' — currently paid, no violation flagged');
+      showToast('This space is currently paid — ' + pay.detail);
+    }
+    checkIssueReady();
+    document.getElementById('station-check-select').value = '';
+  }, 50);
+}
+
+/* ---------------- BOOT WORKFLOW ---------------- */
+function renderBootedList() {
+  const list = document.getElementById('booted-list');
+  if (!list) return;
+  const boots = getActiveBoots();
+  list.innerHTML = '';
+  if (boots.length === 0) {
+    list.innerHTML = '<div class="empty-state">No vehicles currently booted.</div>';
+    return;
+  }
+  boots.forEach(function (b) {
+    const vehicle = mockVehicleLookup(b.plate);
+    const balance = getOutstandingBalance(b.plate);
+    const total = balance + Number(b.bootFee || 0);
+    const row = document.createElement('div');
+    row.className = 'meter-row';
+    row.innerHTML =
+      '<div class="info">' +
+        '<div class="plate">' + escapeHtml(vehicle.vehicleColor + ' ' + vehicle.vehicleMake + ' ' + vehicle.vehicleModel) + '</div>' +
+        '<div class="meta">Plate ' + escapeHtml(b.plate) + ' · Booted ' + new Date(b.bootedAt).toLocaleString() + ' · Due $' + total + '</div>' +
+      '</div>' +
+      '<button class="btn btn-amber" style="width:auto;padding:8px 14px;font-size:13px;">Release</button>';
+    row.querySelector('button').onclick = function () { openBootRelease(b.id); };
+    list.appendChild(row);
+  });
+}
+
+function openBootCreate() {
+  document.getElementById('boot-body').innerHTML =
+    '<h3>Boot a Vehicle</h3>' +
+    '<label style="margin-top:0;">License plate</label>' +
+    '<input id="boot-plate-input" placeholder="Plate number" style="text-transform:uppercase;" />' +
+    '<button class="btn btn-amber" style="margin-top:10px;" onclick="checkPlateForBoot()">Check Outstanding Balance</button>' +
+    '<div id="boot-check-result"></div>';
+  document.getElementById('boot-overlay').style.display = 'flex';
+}
+function closeBootOverlay() {
+  document.getElementById('boot-overlay').style.display = 'none';
+}
+function checkPlateForBoot() {
+  const plate = document.getElementById('boot-plate-input').value.trim().toUpperCase();
+  if (!plate) { showToast('Enter a plate first'); return; }
+  if (getActiveBootForPlate(plate)) {
+    document.getElementById('boot-check-result').innerHTML = '<p class="hint" style="color:var(--curb-red);margin-top:10px;">This vehicle is already booted.</p>';
+    return;
+  }
+  const unpaid = getUnpaidCitationsForPlate(plate);
+  const balance = getOutstandingBalance(plate);
+  const vehicle = mockVehicleLookup(plate);
+  const defaultFee = getDefaultBootFee();
+  document.getElementById('boot-check-result').innerHTML =
+    '<div class="boot-row"><span class="k">Vehicle</span><span class="v">' + escapeHtml(vehicle.vehicleColor + ' ' + vehicle.vehicleMake + ' ' + vehicle.vehicleModel) + '</span></div>' +
+    '<div class="boot-row"><span class="k">Unpaid citations</span><span class="v">' + unpaid.length + '</span></div>' +
+    '<div class="boot-row"><span class="k">Outstanding balance</span><span class="v">$' + balance + '</span></div>' +
+    '<label style="margin-top:10px;">Boot fee ($)</label>' +
+    '<input id="boot-fee-input" type="number" value="' + defaultFee + '" />' +
+    '<label style="margin-top:10px;">Reason / notes</label>' +
+    '<textarea id="boot-reason-input" rows="2" placeholder="e.g. 3+ unpaid citations on record"></textarea>' +
+    '<div class="boot-total"><span>Total due to release</span><span class="amt">$<span id="boot-total-amt">' + (balance + defaultFee) + '</span></span></div>' +
+    '<button class="btn btn-amber" style="margin-top:14px;" onclick="confirmBoot(\'' + plate + '\')">Confirm Boot</button>';
+  document.getElementById('boot-fee-input').addEventListener('input', function () {
+    const fee = Number(this.value) || 0;
+    document.getElementById('boot-total-amt').textContent = (balance + fee).toFixed(0);
+  });
+}
+function confirmBoot(plate) {
+  const fee = Number(document.getElementById('boot-fee-input').value) || 0;
+  const reason = document.getElementById('boot-reason-input').value.trim();
+  const profile = getProfile();
+  createBoot({
+    id: 'boot_' + Date.now(),
+    plate: plate,
+    bootFee: fee,
+    reason: reason,
+    status: 'booted',
+    bootedAt: new Date().toISOString(),
+    bootingOfficer: profile.name
+  });
+  showToast('Vehicle booted');
+  closeBootOverlay();
+  renderBootedList();
+}
+function openBootRelease(bootId) {
+  const boot = getBoots().find(function (b) { return b.id === bootId; });
+  if (!boot) return;
+  const vehicle = mockVehicleLookup(boot.plate);
+  const balance = getOutstandingBalance(boot.plate);
+  const total = balance + Number(boot.bootFee || 0);
+  document.getElementById('boot-body').innerHTML =
+    '<h3>Release Boot</h3>' +
+    '<div class="boot-row"><span class="k">Plate</span><span class="v">' + escapeHtml(boot.plate) + '</span></div>' +
+    '<div class="boot-row"><span class="k">Vehicle</span><span class="v">' + escapeHtml(vehicle.vehicleColor + ' ' + vehicle.vehicleMake + ' ' + vehicle.vehicleModel) + '</span></div>' +
+    '<div class="boot-row"><span class="k">Outstanding citations</span><span class="v">$' + balance + '</span></div>' +
+    '<div class="boot-row"><span class="k">Boot fee</span><span class="v">$' + boot.bootFee + '</span></div>' +
+    '<div class="boot-total"><span>Total due</span><span class="amt">$' + total + '</span></div>' +
+    '<p class="hint" style="margin-top:12px;">Mark as paid via — digital payments only, no cash:</p>' +
+    '<div class="btn-row">' +
+      '<button class="btn btn-outline" onclick="confirmRelease(\'' + boot.id + '\',\'card\',' + total + ')">💳 Card</button>' +
+      '<button class="btn btn-outline" onclick="confirmRelease(\'' + boot.id + '\',\'digital_wallet\',' + total + ')">📲 Digital Wallet</button>' +
+    '</div>';
+  document.getElementById('boot-overlay').style.display = 'flex';
+}
+function confirmRelease(bootId, method, amount) {
+  const profile = getProfile();
+  const boot = getBoots().find(function (b) { return b.id === bootId; });
+  if (boot) {
+    const unpaid = getUnpaidCitationsForPlate(boot.plate);
+    const all = getCitations();
+    unpaid.forEach(function (c) {
+      const idx = all.findIndex(function (x) { return x.id === c.id; });
+      if (idx > -1) {
+        all[idx].paymentReceived = true;
+        all[idx].paymentMethod = method;
+        all[idx].paymentAmount = all[idx].fineAmount;
+        all[idx].paymentReceivedAt = new Date().toISOString();
+      }
+    });
+    saveCitations(all);
+  }
+  releaseBoot(bootId, { officer: profile.name, method: method, amount: amount });
+  showToast('Boot released — outstanding citations marked paid');
+  closeBootOverlay();
+  renderBootedList();
+  renderHome();
+}
+
+function buildCitationRow(c) {
+  const row = document.createElement('div');
+  row.className = 'citation-row';
+  row.onclick = function () { openTicket(c.id); };
+  const time = new Date(c.issuedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let badgeClass = 'issued', badgeText = 'Issued';
+  if (c.status === 'void') { badgeClass = 'void'; badgeText = 'Void'; }
+  else if (c.serviceMethod === 'mail_pending') { badgeClass = 'mail'; badgeText = c.mailStatus === 'mailed' ? 'Mailed' : 'Filed'; }
+  row.innerHTML =
+    '<img class="thumb" src="' + (c.photo || placeholderThumb()) + '" />' +
+    '<div class="info">' +
+      '<div class="plate">' + escapeHtml(c.plate || c.vin || '—') + '</div>' +
+      '<div class="meta">' + escapeHtml(c.violationLabel) + ' · ' + time + '</div>' +
+    '</div>' +
+    '<span class="badge ' + badgeClass + '">' + badgeText + '</span>';
+  return row;
+}
+function placeholderThumb() {
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect width="44" height="44" fill="%23272B32"/></svg>');
+}
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, function (c) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+  });
+}
+
+/* ---------------- NEW CITATION DRAFT ---------------- */
+function startNewCitation() {
+  draft = {
+    id: 'd_' + Date.now(),
+    idType: 'plate',
+    plate: '', vin: '', state: '',
+    ownerName: '', vehicleMake: '', vehicleModel: '', vehicleColor: '',
+    regStatus: '', regExpiry: '', paymentStatus: '', paymentDetail: '',
+    violationCodeId: '', violationCode: '', violationLabel: '', violationJurisdiction: '', fineAmount: 0,
+    feeType: 'citation',
+    lat: null, lng: null, locState: '', addressNote: '', notes: '',
+    photo: null
+  };
+
+  document.getElementById('scan-status').textContent = 'Starting camera…';
+  document.getElementById('vehicle-section').style.display = 'none';
+  document.getElementById('manual-plate').value = '';
+  lastHitPlate = null; lastHitTime = 0;
+  hardwareZoomSupported = false;
+  updateZoomUI();
+
+  // populate static dropdowns fresh each time
+  fillSelect(document.getElementById('f-state'), US_STATES, 'Select state');
+  fillSelect(document.getElementById('f-loc-state'), US_STATES, 'Select state');
+  fillSelect(document.getElementById('station-check-select'), METER_LOCATIONS, 'Select a station/space…');
+  fillSelect(document.getElementById('f-color'), VEHICLE_COLORS.concat([['__other__', 'Other (type below)']]), 'Select color');
+  fillSelect(document.getElementById('f-make'), VEHICLE_MAKES.concat([['__other__', 'Other (type below)']]), 'Select make');
+  fillSelect(document.getElementById('f-regstatus'), REG_STATUS_OPTIONS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), null);
+  fillSelect(document.getElementById('f-paymentstatus'), PAYMENT_STATUS_OPTIONS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), null);
+  document.getElementById('f-make-other').style.display = 'none';
+  document.getElementById('f-color-other').style.display = 'none';
+  document.getElementById('f-model').value = '';
+  document.getElementById('f-paymentdetail').value = '';
+
+  // date & time auto-filled, editable
+  const now = new Date();
+  document.getElementById('f-date').value = now.toISOString().slice(0, 10);
+  document.getElementById('f-time').value = now.toTimeString().slice(0, 5);
+
+  activeJurisdiction = 'all';
+  buildJurisdictionPills();
+  buildViolationSelect();
+  populateRemarks('');
+  document.getElementById('f-address').value = '';
+  document.getElementById('f-notes').value = '';
+  document.querySelectorAll('#fee-type-pills .pill').forEach(function (p) {
+    p.classList.toggle('active', p.dataset.feetype === 'citation');
+  });
+  document.getElementById('fee-type-hint').textContent = 'Full fine amount applies.';
+
+  resetLocation();
+  document.getElementById('issue-btn').disabled = true;
+  showScreen('draft');
+  startLiveScan();
+}
+
+function haltCitation() {
+  const hasData = draft && (draft.plate || draft.vin || draft.photo || draft.violationCodeId);
+  if (hasData) {
+    if (!confirm('Discard this citation? Nothing has been saved and this cannot be undone.')) return;
+  }
+  stopLiveScan();
+  draft = null;
+  showScreen('home');
+  showToast('Citation discarded');
+}
+
+/* ---------------- LIVE SCAN ("always awake" ALPR-style capture) ---------------- */
+async function startLiveScan() {
+  scanPaused = false;
+  setPauseButtonLabel();
+  updateScanStatus('Starting camera…');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    updateScanStatus('Camera not supported on this browser — use the options below');
+    return;
+  }
+  try {
+    liveStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    const video = document.getElementById('live-video');
+    video.srcObject = liveStream;
+    video.play().catch(function () {});
+    document.getElementById('live-scan-box').classList.add('active');
+    updateScanStatus('Always scanning — frame the plate in the box');
+    clearInterval(scanInterval);
+    scanInterval = setInterval(function () { captureAndRecognize(false); }, SCAN_INTERVAL_MS);
+
+    liveVideoTrack = liveStream.getVideoTracks()[0];
+    hardwareZoomSupported = false;
+    if (liveVideoTrack && liveVideoTrack.getCapabilities) {
+      try {
+        const caps = liveVideoTrack.getCapabilities();
+        if (caps && caps.zoom) {
+          hardwareZoomSupported = true;
+          const clamped = Math.min(caps.zoom.max, Math.max(caps.zoom.min, zoomLevel));
+          await liveVideoTrack.applyConstraints({ advanced: [{ zoom: clamped }] });
+        }
+      } catch (e) { hardwareZoomSupported = false; }
+    }
+    updateZoomUI();
+  } catch (e) {
+    updateScanStatus('Camera unavailable (' + (e && e.name ? e.name : 'permission denied') + ') — use the options below');
+    document.getElementById('live-scan-box').classList.remove('active');
+  }
+}
+
+function stopLiveScan() {
+  clearInterval(scanInterval); scanInterval = null;
+  if (liveStream) { liveStream.getTracks().forEach(function (t) { t.stop(); }); liveStream = null; }
+  liveVideoTrack = null;
+  const video = document.getElementById('live-video');
+  if (video) video.srcObject = null;
+  const box = document.getElementById('live-scan-box');
+  if (box) box.classList.remove('active');
+}
+
+function toggleScanPause() {
+  scanPaused = !scanPaused;
+  setPauseButtonLabel();
+  updateScanStatus(scanPaused ? 'Paused' : 'Always scanning — frame the plate in the box');
+}
+function setPauseButtonLabel() {
+  const btn = document.getElementById('pause-scan-btn');
+  if (btn) btn.textContent = scanPaused ? '▶ Resume' : '⏸ Pause';
+}
+function updateScanStatus(msg) {
+  const el = document.getElementById('scan-status');
+  if (el) el.textContent = msg;
+}
+
+function isPlausiblePlate(text) {
+  if (!text) return false;
+  return text.length >= MIN_PLATE_LEN && text.length <= MAX_PLATE_LEN && /[A-Z]/.test(text) && /[0-9]/.test(text);
+}
+
+function captureAndRecognize(forced) {
+  if (!forced && (!liveStream || scanPaused)) return;
+  if (scanBusy) return;
+  const video = document.getElementById('live-video');
+  if (!video || !video.videoWidth) {
+    if (forced) updateScanStatus('Camera not ready yet — try again in a second');
+    return;
+  }
+  scanBusy = true;
+  if (forced) updateScanStatus('Reading…');
+
+  const frameDataUrl = captureGuideFrame(video);
+  const cfg = getAIConfig();
+
+  // With an AI key configured, EVERY cycle — continuous or manually forced —
+  // reads directly via Claude vision. This is what makes "always scanning"
+  // actually behave like LPR rather than a once-in-a-while lucky guess.
+  // Trade-off: this calls the API roughly every couple seconds while the
+  // camera is open and unpaused, not just when something is found.
+  if (cfg.apiKey) {
+    if (!forced) updateScanStatus('Always scanning (AI) — point at a plate');
+    const base64 = stripDataUrlPrefix(frameDataUrl);
+    callClaudeVision(base64, 'image/jpeg', PLATE_VISION_PROMPT).then(function (result) {
+      scanBusy = false;
+      finalizePlateResult(result, frameDataUrl, forced, null);
+    });
+    return;
+  }
+
+  if (typeof Tesseract === 'undefined') {
+    scanBusy = false;
+    updateScanStatus('Scanner engine unavailable — add an API key in Settings → AI Recognition, or use manual entry below');
+    return;
+  }
+
+  if (!forced) updateScanStatus('Basic scanner active — add an API key in Settings for LPR-grade accuracy');
+
+  Tesseract.recognize(frameDataUrl, 'eng', {
+    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  }).then(function (result) {
+    scanBusy = false;
+    const text = (result.data.text || '').replace(/[^A-Z0-9]/g, '').trim();
+    if (!isPlausiblePlate(text)) {
+      if (forced) updateScanStatus(text ? 'Read "' + text + '" — too short/long to trust, edit below' : 'Could not read a plate — edit below or reposition');
+      return;
+    }
+    const now = Date.now();
+    const isFreshHit = forced || text !== lastHitPlate || (now - lastHitTime) > HIT_COOLDOWN_MS;
+    if (!isFreshHit) {
+      if (forced) updateScanStatus('Already scanned ' + text + ' — move to the next vehicle or edit below');
+      return;
+    }
+    lastHitPlate = text; lastHitTime = now;
+    handleScanHit(text, frameDataUrl);
+  }).catch(function () {
+    scanBusy = false;
+    if (forced) updateScanStatus('Scan failed — try again or use the options below');
+  });
+}
+
+function captureGuideFrame(video) {
+  // Sample the centered guide box for speed and accuracy: base ~70% width, ~35% height.
+  // If hardware zoom isn't available, simulate zoom by cropping a smaller, centered
+  // region instead (software zoom) — the on-screen guide box scales to match.
+  const effectiveZoom = hardwareZoomSupported ? 1 : zoomLevel;
+  const wFrac = Math.max(0.7 / effectiveZoom, 0.08);
+  const hFrac = Math.max(0.35 / effectiveZoom, 0.08);
+  const sw = video.videoWidth * wFrac, sh = video.videoHeight * hFrac;
+  const sx = (video.videoWidth - sw) / 2, sy = (video.videoHeight - sh) / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = sw; canvas.height = sh;
+  canvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+function adjustZoom(delta) {
+  zoomLevel = Math.min(8, Math.max(1, Math.round((zoomLevel + delta) * 2) / 2));
+  localStorage.setItem('pe_zoom_level', String(zoomLevel));
+  if (hardwareZoomSupported && liveVideoTrack) {
+    try {
+      const caps = liveVideoTrack.getCapabilities();
+      const clamped = Math.min(caps.zoom.max, Math.max(caps.zoom.min, zoomLevel));
+      liveVideoTrack.applyConstraints({ advanced: [{ zoom: clamped }] });
+    } catch (e) {}
+  }
+  updateZoomUI();
+}
+function updateZoomUI() {
+  const label = document.getElementById('zoom-label');
+  if (label) label.textContent = zoomLevel.toFixed(1) + 'x' + (hardwareZoomSupported ? '' : ' (digital)');
+  const frame = document.querySelector('#screen-draft .scan-frame');
+  if (!frame) return;
+  if (hardwareZoomSupported) {
+    // sensor itself is zoomed; the guide box stays at the base proportion
+    frame.style.width = '70%'; frame.style.height = '35%';
+    frame.style.left = '15%'; frame.style.top = '32%';
+  } else {
+    const w = 70 / zoomLevel, h = 35 / zoomLevel;
+    frame.style.width = w + '%'; frame.style.height = h + '%';
+    frame.style.left = ((100 - w) / 2) + '%'; frame.style.top = ((100 - h) / 2) + '%';
+  }
+}
+
+/**
+ * Resolves a Claude vision plate-read result, falling back to a Tesseract
+ * guess (if any) when the AI couldn't read it either. Applies the same
+ * dedup/cooldown logic whichever source ultimately supplied the text.
+ */
+function finalizePlateResult(aiResult, frameDataUrl, forced, fallbackText) {
+  const aiPlate = aiResult && aiResult.plate ? String(aiResult.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+  const finalText = aiPlate || fallbackText || null;
+  if (!finalText) {
+    updateScanStatus(forced ? 'AI could not read a plate — edit below or reposition' : 'Always scanning — point at a plate');
+    return;
+  }
+  const now = Date.now();
+  if (forced || finalText !== lastHitPlate || (now - lastHitTime) > HIT_COOLDOWN_MS) {
+    lastHitPlate = finalText; lastHitTime = now;
+    handleScanHit(finalText, frameDataUrl);
+  } else {
+    updateScanStatus('Already scanned ' + finalText + ' — move to the next vehicle or edit below');
+  }
+}
+
+function handleScanHit(text, frameDataUrl) {
+  const stealth = getStealthMode();
+  if (!stealth && navigator.vibrate) navigator.vibrate(200);
+  if (!stealth) flashScan();
+  resizeImage(frameDataUrl, 800, function (resized) { if (draft) draft.photo = resized; });
+  updateScanStatus('Hit: ' + text + ' — paused while you handle this vehicle');
+  scanPaused = true;
+  setPauseButtonLabel();
+  document.getElementById('manual-plate').value = text;
+  if (draft) draft.idType = 'plate';
+  lookupVehicle();
+}
+
+function flashScan() {
+  const el = document.getElementById('scan-flash');
+  if (!el) return;
+  el.classList.add('flash');
+  setTimeout(function () { el.classList.remove('flash'); }, 350);
+}
+
+function setIdType(type) {
+  if (draft) draft.idType = type;
+  document.querySelectorAll('#screen-draft .toggle-row .pill').forEach(function (p) {
+    p.classList.toggle('active', p.dataset.type === type);
+  });
+}
+
+/* ---------------- Fallback: upload a single photo (no live camera available) ---------------- */
+function handleCapture(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    resizeImage(e.target.result, 800, function (resized) {
+      if (draft) draft.photo = resized;
+      const cfg = getAIConfig();
+      if (cfg.apiKey) {
+        updateScanStatus('Reading uploaded photo with AI…');
+        callClaudeVision(stripDataUrlPrefix(resized), 'image/jpeg', PLATE_VISION_PROMPT).then(function (result) {
+          const plate = result && result.plate ? String(result.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+          if (plate) {
+            document.getElementById('manual-plate').value = plate;
+            updateScanStatus('Detected ' + plate + ' from photo');
+            lookupVehicle();
+          } else {
+            updateScanStatus('AI could not read a plate in that photo — type it below');
+          }
+        });
+        return;
+      }
+      updateScanStatus('Reading uploaded photo…');
+      if (typeof Tesseract === 'undefined') {
+        updateScanStatus('Scanner engine unavailable — type the plate manually below');
+        return;
+      }
+      Tesseract.recognize(resized, 'eng', {
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      }).then(function (result) {
+        const text = (result.data.text || '').replace(/[^A-Z0-9]/g, '').trim();
+        document.getElementById('manual-plate').value = text;
+        if (isPlausiblePlate(text)) {
+          updateScanStatus('Detected ' + text + ' from photo');
+          lookupVehicle();
+        } else {
+          updateScanStatus(text ? 'Read "' + text + '" — check it below and tap Look Up' : 'Could not read the photo clearly — type the plate below');
+        }
+      }).catch(function () {
+        updateScanStatus('Could not read the photo — type the plate manually below');
+      });
+    });
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ---------------- Vehicle photo recognition (make/model/color) — requires AI key ---------------- */
+function scanVehiclePhoto(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const cfg = getAIConfig();
+  if (!cfg.apiKey) {
+    showToast('Add an Anthropic API key in Settings to enable real vehicle recognition');
+    evt.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    resizeImage(e.target.result, 800, function (resized) {
+      updateVehiclePhotoStatus('Identifying vehicle…');
+      callClaudeVision(stripDataUrlPrefix(resized), 'image/jpeg', VEHICLE_VISION_PROMPT).then(function (result) {
+        if (!result) { updateVehiclePhotoStatus('Could not identify the vehicle — fill in manually below'); return; }
+        applyVehiclePhotoResult(result);
+      });
+    });
+  };
+  reader.readAsDataURL(file);
+}
+function applyVehiclePhotoResult(result) {
+  const filled = [];
+  if (result.make) { setSelectOrOtherValue('f-make', 'f-make-other', result.make); filled.push('make'); }
+  if (result.model) { document.getElementById('f-model').value = result.model; filled.push('model'); }
+  if (result.color) { setSelectOrOtherValue('f-color', 'f-color-other', result.color); filled.push('color'); }
+  updateVehiclePhotoStatus(filled.length ? ('AI filled: ' + filled.join(', ') + ' — please verify against the vehicle') : 'AI could not confidently identify make/model/color — fill in manually');
+}
+function setSelectOrOtherValue(selectId, otherId, value) {
+  const sel = document.getElementById(selectId);
+  const match = Array.from(sel.options).find(function (o) { return o.value.toLowerCase() === String(value).toLowerCase(); });
+  const otherInput = document.getElementById(otherId);
+  if (match) {
+    sel.value = match.value;
+    otherInput.style.display = 'none';
+  } else {
+    sel.value = '__other__';
+    otherInput.style.display = 'block';
+    otherInput.value = value;
+  }
+}
+function updateVehiclePhotoStatus(msg) {
+  const el = document.getElementById('vehicle-photo-status');
+  if (el) el.textContent = msg;
+}
+
+function resizeImage(dataUrl, maxWidth, callback) {
+  const img = new Image();
+  img.onload = function () {
+    const scale = Math.min(1, maxWidth / img.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    callback(canvas.toDataURL('image/jpeg', 0.7));
+  };
+  img.src = dataUrl;
+}
+
+function lookupVehicle() {
+  const value = document.getElementById('manual-plate').value.trim();
+  if (!value) { showToast('Enter a plate or VIN first'); return; }
+  if (draft.idType === 'plate') { draft.plate = value.toUpperCase(); draft.vin = ''; }
+  else { draft.vin = value.toUpperCase(); draft.plate = ''; }
+
+  document.getElementById('vehicle-section').style.display = 'block';
+  document.getElementById('lookup-status').innerHTML = '<div class="spinner"></div> Looking up record…';
+  document.getElementById('vehicle-fields').style.display = 'none';
+
+  setTimeout(function () {
+    const data = mockVehicleLookup(value);
+    Object.assign(draft, data);
+    fillVehicleFields(draft);
+    document.getElementById('lookup-status').innerHTML = '';
+    document.getElementById('vehicle-fields').style.display = 'block';
+
+    const priors = priorCitationCount(value);
+    if (priors > 0) {
+      showToast(priors + ' prior citation' + (priors > 1 ? 's' : '') + ' on record for this vehicle');
+    }
+    checkIssueReady();
+  }, 650); // simulated lookup delay
+}
+
+function fillVehicleFields(d) {
+  document.getElementById('f-owner').value = d.ownerName;
+  document.getElementById('f-model').value = d.vehicleModel;
+  document.getElementById('f-make').value = d.vehicleMake;
+  document.getElementById('f-color').value = d.vehicleColor;
+  document.getElementById('f-state').value = d.state;
+  document.getElementById('f-regexp').value = d.regExpiry;
+  document.getElementById('f-regstatus').value = d.regStatus;
+  document.getElementById('f-paymentstatus').value = d.paymentStatus;
+  document.getElementById('f-paymentdetail').value = d.paymentDetail;
+  document.getElementById('f-make-other').style.display = 'none';
+  document.getElementById('f-color-other').style.display = 'none';
+}
+
+/* ---------------- VIOLATION CODE SELECT + JURISDICTION FILTER ---------------- */
+function buildJurisdictionPills() {
+  document.querySelectorAll('#jurisdiction-pills .pill').forEach(function (p) {
+    p.classList.toggle('active', p.dataset.jurisdiction === activeJurisdiction);
+  });
+}
+function setJurisdiction(j) {
+  activeJurisdiction = j;
+  buildJurisdictionPills();
+  buildViolationSelect();
+}
+function buildViolationSelect() {
+  const codes = getCodes();
+  const sel = document.getElementById('violation-select');
+  const keep = draft ? draft.violationCodeId : '';
+  sel.innerHTML = '<option value="">Select violation…</option>';
+
+  JURISDICTIONS.forEach(function (j) {
+    if (activeJurisdiction !== 'all' && activeJurisdiction !== j) return;
+    const group = codes.filter(function (c) { return c.jurisdiction === j; });
+    if (group.length === 0) return;
+    const og = document.createElement('optgroup');
+    og.label = j.charAt(0).toUpperCase() + j.slice(1) + ' code';
+    group.forEach(function (c) {
+      const o = document.createElement('option');
+      o.value = c.id;
+      o.textContent = (c.code ? c.code + ' — ' : '') + c.label + ' ($' + c.fine + ')';
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+
+  // restore selection if it's still in the filtered list
+  const stillThere = Array.from(sel.options).some(function (o) { return o.value === keep; });
+  sel.value = stillThere ? keep : '';
+  onViolationChange();
+}
+function onViolationChange() {
+  const sel = document.getElementById('violation-select');
+  const codes = getCodes();
+  const code = codes.find(function (c) { return c.id === sel.value; });
+  if (code && draft) {
+    draft.violationCodeId = code.id;
+    draft.violationCode = code.code;
+    draft.violationLabel = code.label;
+    draft.violationJurisdiction = code.jurisdiction;
+    draft.fineAmount = draft.feeType === 'courtesy' ? getCourtesyFee() : code.fine;
+    populateRemarks(code.id);
+  } else if (draft) {
+    draft.violationCodeId = ''; draft.violationCode = ''; draft.violationLabel = ''; draft.violationJurisdiction = ''; draft.fineAmount = 0;
+    populateRemarks('');
+  }
+  checkIssueReady();
+}
+function setFeeType(type) {
+  if (!draft) return;
+  draft.feeType = type;
+  document.querySelectorAll('#fee-type-pills .pill').forEach(function (p) {
+    p.classList.toggle('active', p.dataset.feetype === type);
+  });
+  document.getElementById('fee-type-hint').textContent = type === 'courtesy'
+    ? ('Reduced courtesy fee of $' + getCourtesyFee() + ' applies instead of the full fine — clearly labeled as a courtesy on the ticket.')
+    : 'Full fine amount applies.';
+  // re-apply fine amount for whichever violation is currently selected, under the new fee type
+  onViolationChange();
+}
+function populateRemarks(codeId) {
+  const wrap = document.getElementById('remark-section');
+  const sel = document.getElementById('remark-select');
+  const codes = getCodes();
+  const code = codes.find(function (c) { return c.id === codeId; });
+  if (!code || !code.remarks || code.remarks.length === 0) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  sel.innerHTML = '<option value="">Add a common remark…</option>';
+  code.remarks.forEach(function (r) {
+    const o = document.createElement('option');
+    o.value = r; o.textContent = r;
+    sel.appendChild(o);
+  });
+}
+function appendRemark() {
+  const sel = document.getElementById('remark-select');
+  if (!sel.value) return;
+  const notes = document.getElementById('f-notes');
+  notes.value = notes.value ? (notes.value + '; ' + sel.value) : sel.value;
+  sel.value = '';
+}
+
+/* ---------------- LOCATION ---------------- */
+function resetLocation() {
+  document.getElementById('loc-status').textContent = 'Getting location…';
+  if (!navigator.geolocation) {
+    document.getElementById('loc-status').textContent = 'Location not supported by this browser — enter manually below.';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(function (pos) {
+    draft.lat = pos.coords.latitude;
+    draft.lng = pos.coords.longitude;
+    document.getElementById('loc-status').textContent =
+      draft.lat.toFixed(5) + ', ' + draft.lng.toFixed(5) + ' — looking up state…';
+    reverseGeocodeState(draft.lat, draft.lng).then(function (stateAbbr) {
+      const base = draft.lat.toFixed(5) + ', ' + draft.lng.toFixed(5);
+      if (stateAbbr) {
+        const locSel = document.getElementById('f-loc-state');
+        const has = Array.from(locSel.options).some(function (o) { return o.value === stateAbbr; });
+        if (has) { locSel.value = stateAbbr; draft.locState = stateAbbr; }
+        document.getElementById('loc-status').textContent = base + ' (' + stateAbbr + ')';
+      } else {
+        document.getElementById('loc-status').textContent = base + ' — state lookup unavailable, select manually below';
+      }
+    });
+  }, function (err) {
+    const reasons = { 1: 'permission denied', 2: 'position unavailable', 3: 'timed out' };
+    const reason = (err && reasons[err.code]) || 'unknown error';
+    document.getElementById('loc-status').textContent = 'Location unavailable (' + reason + ') — enter manually below.';
+  }, { timeout: 10000 });
+}
+
+function checkIssueReady() {
+  const hasId = draft && (draft.plate || draft.vin);
+  const hasCode = draft && draft.violationCodeId;
+  const ready = !!(hasId && hasCode);
+  document.getElementById('issue-btn').disabled = !ready;
+  const mailBtn = document.getElementById('file-mail-btn');
+  if (mailBtn) mailBtn.disabled = !ready;
+}
+
+/** Reads every form field into the draft and computes the issued timestamp. Shared by Issue and File-for-Mail. */
+function collectDraftFields() {
+  draft.vehicleColor = selectOrOther(document.getElementById('f-color'), 'f-color-other');
+  draft.vehicleMake = selectOrOther(document.getElementById('f-make'), 'f-make-other');
+  draft.vehicleModel = document.getElementById('f-model').value.trim();
+  draft.state = document.getElementById('f-state').value;
+  draft.regExpiry = document.getElementById('f-regexp').value;
+  draft.regStatus = document.getElementById('f-regstatus').value;
+  draft.paymentStatus = document.getElementById('f-paymentstatus').value;
+  draft.paymentDetail = document.getElementById('f-paymentdetail').value.trim();
+  draft.ownerName = document.getElementById('f-owner').value.trim();
+  draft.locState = document.getElementById('f-loc-state').value;
+  draft.addressNote = document.getElementById('f-address').value.trim();
+  draft.notes = document.getElementById('f-notes').value.trim();
+
+  const dateStr = document.getElementById('f-date').value;
+  const timeStr = document.getElementById('f-time').value;
+  if (dateStr && timeStr) {
+    return new Date(dateStr + 'T' + timeStr + ':00').toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function issueCitation() {
+  const profile = getProfile();
+  const issuedAt = collectDraftFields();
+
+  draft.id = 'cit_' + Date.now();
+  draft.citationNumber = nextCitationNumber(profile.department.replace(/[^A-Za-z]/g, '').slice(0, 3) || 'CIT');
+  draft.officerName = profile.name;
+  draft.officerBadge = profile.badge;
+  draft.department = profile.department;
+  draft.issuedAt = issuedAt;
+  draft.status = 'issued';
+  draft.serviceMethod = 'placed';
+  draft.mailStatus = null;
+  draft.priorCount = priorCitationCount(draft.plate || draft.vin || '');
+
+  const all = getCitations();
+  all.push(draft);
+  saveCitations(all);
+  syncToSupabase(draft, 'insert');
+
+  const issuedId = draft.id;
+  draft = null;
+  showToast('Citation issued');
+  showScreen('home');
+  openTicket(issuedId);
+  if (getAutoPrint()) setTimeout(printTicket, 300);
+}
+
+/**
+ * For when the vehicle drives off before the citation can be physically placed.
+ * Many jurisdictions explicitly allow this — citation is filed and mailed to the
+ * registered owner instead of voided — but that depends on local ordinance, so
+ * this is flagged clearly rather than treated as automatically valid everywhere.
+ * Mailing itself still depends on the department's existing DMV-linked back-office
+ * process; this just preserves the evidence and flags it for that handoff.
+ */
+function fileForMail() {
+  const profile = getProfile();
+  const issuedAt = collectDraftFields();
+
+  draft.id = 'cit_' + Date.now();
+  draft.citationNumber = nextCitationNumber(profile.department.replace(/[^A-Za-z]/g, '').slice(0, 3) || 'CIT');
+  draft.officerName = profile.name;
+  draft.officerBadge = profile.badge;
+  draft.department = profile.department;
+  draft.issuedAt = issuedAt;
+  draft.status = 'issued';
+  draft.serviceMethod = 'mail_pending';
+  draft.mailStatus = 'pending';
+  draft.filedAt = new Date().toISOString();
+  draft.priorCount = priorCitationCount(draft.plate || draft.vin || '');
+
+  const all = getCitations();
+  all.push(draft);
+  saveCitations(all);
+  syncToSupabase(draft, 'insert');
+
+  const issuedId = draft.id;
+  draft = null;
+  showToast('Filed for mail — vehicle left before citation could be placed');
+  showScreen('home');
+  openTicket(issuedId);
+}
+
+/* ---------------- HISTORY ---------------- */
+function renderHistory() {
+  const all = getCitations().slice().sort(function (a, b) { return new Date(b.issuedAt) - new Date(a.issuedAt); });
+  const q = (document.getElementById('history-search').value || '').toUpperCase();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  let filtered = all;
+  if (activeFilter === 'today') filtered = filtered.filter(function (c) { return c.issuedAt.slice(0, 10) === todayStr; });
+  if (activeFilter === 'void') filtered = filtered.filter(function (c) { return c.status === 'void'; });
+  if (activeFilter === 'mail') filtered = filtered.filter(function (c) { return c.serviceMethod === 'mail_pending' && c.mailStatus === 'pending'; });
+  if (q) filtered = filtered.filter(function (c) {
+    return (c.plate || '').includes(q) || (c.vin || '').includes(q) || (c.citationNumber || '').toUpperCase().includes(q);
+  });
+
+  document.querySelectorAll('#filter-pills .pill').forEach(function (p) {
+    p.classList.toggle('active', p.dataset.filter === activeFilter);
+  });
+
+  const list = document.getElementById('history-list');
+  list.innerHTML = '';
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state">No citations match.</div>';
+    return;
+  }
+  filtered.forEach(function (c) { list.appendChild(buildCitationRow(c)); });
+}
+function setHistoryFilter(f) { activeFilter = f; renderHistory(); }
+
+/* ---------------- TICKET DETAIL / VOID ---------------- */
+function openTicket(id) {
+  const c = getCitations().find(function (x) { return x.id === id; });
+  if (!c) return;
+  activeTicketId = id;
+  const issuedDate = new Date(c.issuedAt);
+  const isCourtesy = c.feeType === 'courtesy';
+  const isMailPending = c.serviceMethod === 'mail_pending';
+  const codes = getCodes();
+  const code = codes.find(function (x) { return x.id === c.violationCodeId; });
+  const payLink = code && code.paymentLink;
+
+  let stampClass, stampText;
+  if (c.status === 'void') { stampClass = 'void'; stampText = 'VOID'; }
+  else if (c.paymentReceived) { stampClass = 'paid'; stampText = 'PAID'; }
+  else if (isMailPending && c.mailStatus === 'pending') { stampClass = 'mail'; stampText = 'FILED — MAIL PENDING'; }
+  else if (isMailPending && c.mailStatus === 'mailed') { stampClass = 'mail'; stampText = 'MAILED'; }
+  else if (isCourtesy) { stampClass = 'courtesy'; stampText = 'COURTESY'; }
+  else { stampClass = 'issued'; stampText = 'ISSUED'; }
+
+  let mailDeadlineStr = '';
+  if (isMailPending && c.filedAt) {
+    const deadline = new Date(c.filedAt);
+    deadline.setDate(deadline.getDate() + getMailWindowDays());
+    mailDeadlineStr = deadline.toLocaleDateString();
+  }
+
+  document.getElementById('ticket-body').innerHTML =
+    '<div class="ticket-head">' +
+      '<div><div class="dept">' + escapeHtml(c.department) + '</div><div class="num">' + escapeHtml(c.citationNumber) + '</div></div>' +
+      '<div class="ticket-stamp ' + stampClass + '">' + stampText + '</div>' +
+    '</div>' +
+    (isCourtesy && c.status !== 'void' ? '<p class="hint" style="color:var(--amber);margin-top:0;">Issued as a courtesy late fee, not a full citation.</p>' : '') +
+    (isMailPending ? '<p class="hint" style="color:#5fa8d3;margin-top:0;">Vehicle left before the citation could be placed — filed for mailing to the registered owner instead of voided. Confirm this is allowed under your department\'s ordinance.' + (mailDeadlineStr ? ' Mailing deadline: ' + mailDeadlineStr + '.' : '') + '</p>' : '') +
+    (c.photo ? '<img class="ticket-photo" src="' + c.photo + '" />' : '') +
+    ticketRow('Plate / VIN', (c.plate || c.vin) + (c.state ? ' (' + c.state + ')' : '')) +
+    ticketRow('Owner on record', c.ownerName) +
+    ticketRow('Vehicle', [c.vehicleColor, c.vehicleMake, c.vehicleModel].filter(Boolean).join(' ')) +
+    ticketRow('Registration', c.regStatus + ' (exp ' + c.regExpiry + ')') +
+    ticketRow('Payment status', c.paymentStatus + ' — ' + c.paymentDetail) +
+    ticketRow('Prior citations', String(c.priorCount || 0)) +
+    ticketRow('Jurisdiction state', c.locState || '—') +
+    ticketRow('Location', c.addressNote || (c.lat ? c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) : '—')) +
+    ticketRow('Officer', c.officerName + ' · Badge ' + c.officerBadge) +
+    ticketRow('Issued', issuedDate.toLocaleString()) +
+    (c.notes ? ticketRow('Notes', c.notes) : '') +
+    '<div class="ticket-fine"><span>' + escapeHtml((c.violationCode ? c.violationCode + ' — ' : '') + c.violationLabel + (isCourtesy ? ' (courtesy)' : '')) + '</span><span class="amt">$' + c.fineAmount + '</span></div>' +
+    (c.status === 'void' ? '<div class="void-note">Voided ' + new Date(c.voidAt).toLocaleString() + ' — ' + escapeHtml(c.voidReason) + '</div>' : '') +
+    (c.paymentReceived ? '<div class="paid-note">Paid on-site: $' + c.paymentAmount + ' via ' + escapeHtml(c.paymentMethod) + ' — ' + new Date(c.paymentReceivedAt).toLocaleString() + '</div>' : '') +
+    (isMailPending && c.mailStatus === 'mailed' ? '<div class="paid-note">Mailed ' + new Date(c.mailedAt).toLocaleString() + '</div>' : '') +
+    (isMailPending && c.mailStatus === 'pending' && c.status !== 'void' ?
+      '<div class="pay-on-site-box"><p class="hint" style="margin-top:0;">Once the back-office mailing step is complete:</p>' +
+      '<button class="btn btn-outline" onclick="markAsMailed()">✉️ Mark as Mailed</button></div>' : '') +
+    (!c.paymentReceived && c.status !== 'void' && payLink ? '<div class="qr-pay-box"><p class="hint" style="margin-top:0;">Scan to pay $' + c.fineAmount + ' now:</p><div id="ticket-qr"></div></div>' : '') +
+    (!c.paymentReceived && c.status !== 'void' ?
+      '<div class="pay-on-site-box"><p class="hint" style="margin-top:0;">Mark paid on-site (collected $' + c.fineAmount + ') — digital payments only, no cash:</p>' +
+      '<div class="btn-row"><button class="btn btn-outline" onclick="markPaidOnSite(\'card\')">💳 Card</button>' +
+      '<button class="btn btn-outline" onclick="markPaidOnSite(\'digital_wallet\')">📲 Digital Wallet</button></div></div>'
+      : (c.paymentReceived ? '<button class="btn btn-ghost" onclick="unmarkPaid()">Undo payment record</button>' : '')) +
+    '<div class="ticket-actions">' +
+      (c.status !== 'void' ? '<button class="btn btn-outline" onclick="voidCitation()">Void / Correct</button>' : '') +
+      '<button class="btn btn-amber" onclick="printTicket()">Print</button>' +
+    '</div>';
+
+  document.getElementById('ticket-overlay').style.display = 'flex';
+  if (!c.paymentReceived && c.status !== 'void' && payLink && typeof QRCode !== 'undefined') {
+    try { new QRCode(document.getElementById('ticket-qr'), { text: payLink, width: 120, height: 120 }); } catch (e) {}
+  }
+}
+function markAsMailed() {
+  const all = getCitations();
+  const idx = all.findIndex(function (x) { return x.id === activeTicketId; });
+  if (idx === -1) return;
+  all[idx].mailStatus = 'mailed';
+  all[idx].mailedAt = new Date().toISOString();
+  saveCitations(all);
+  syncToSupabase(all[idx], 'update');
+  showToast('Marked as mailed');
+  openTicket(activeTicketId);
+}
+function markPaidOnSite(method) {
+  const all = getCitations();
+  const idx = all.findIndex(function (x) { return x.id === activeTicketId; });
+  if (idx === -1) return;
+  all[idx].paymentReceived = true;
+  all[idx].paymentMethod = method;
+  all[idx].paymentAmount = all[idx].fineAmount;
+  all[idx].paymentReceivedAt = new Date().toISOString();
+  saveCitations(all);
+  syncToSupabase(all[idx], 'update');
+  showToast('Marked paid via ' + method);
+  openTicket(activeTicketId);
+}
+function unmarkPaid() {
+  if (!confirm('Remove the payment record for this citation?')) return;
+  const all = getCitations();
+  const idx = all.findIndex(function (x) { return x.id === activeTicketId; });
+  if (idx === -1) return;
+  all[idx].paymentReceived = false;
+  all[idx].paymentMethod = null;
+  all[idx].paymentAmount = null;
+  all[idx].paymentReceivedAt = null;
+  saveCitations(all);
+  syncToSupabase(all[idx], 'update');
+  showToast('Payment record removed');
+  openTicket(activeTicketId);
+}
+function ticketRow(k, v) {
+  return '<div class="ticket-row"><span class="k">' + escapeHtml(k) + '</span><span class="v">' + escapeHtml(v || '—') + '</span></div>';
+}
+function printTicket() {
+  const ticketEl = document.querySelector('.ticket');
+  if (ticketEl) {
+    ticketEl.classList.remove('print-w-2', 'print-w-3', 'print-w-4');
+    const width = getPrintWidth();
+    if (width && width !== 'full') ticketEl.classList.add(width);
+  }
+  window.print();
+}
+
+function closeTicket() {
+  document.getElementById('ticket-overlay').style.display = 'none';
+  activeTicketId = null;
+  renderHome(); renderHistory();
+}
+function voidCitation() {
+  const reason = prompt('Reason for voiding this citation (required — kept in the audit log):');
+  if (!reason || !reason.trim()) { showToast('Void cancelled — a reason is required'); return; }
+  const all = getCitations();
+  const idx = all.findIndex(function (x) { return x.id === activeTicketId; });
+  if (idx === -1) return;
+  all[idx].status = 'void';
+  all[idx].voidReason = reason.trim();
+  all[idx].voidAt = new Date().toISOString();
+  saveCitations(all);
+  syncToSupabase(all[idx], 'update');
+  showToast('Citation voided');
+  openTicket(activeTicketId);
+}
+
+/* ---------------- SETTINGS ---------------- */
+function renderSettings() {
+  const profile = getProfile();
+  document.getElementById('s-dept').value = profile.department;
+  document.getElementById('s-name').value = profile.name;
+  document.getElementById('s-badge').value = profile.badge;
+
+  const cfg = getSyncConfig();
+  document.getElementById('s-sb-url').value = cfg.url;
+  document.getElementById('s-sb-key').value = cfg.key;
+  document.getElementById('s-sb-enabled').checked = cfg.enabled;
+
+  const aiCfg = getAIConfig();
+  document.getElementById('s-ai-key').value = aiCfg.apiKey;
+  document.getElementById('s-ai-model').value = aiCfg.model || 'claude-haiku-4-5-20251001';
+
+  const meterCfg = getMeterVendorConfig();
+  document.getElementById('s-meter-vendor').value = meterCfg.vendor;
+  document.getElementById('s-meter-endpoint').value = meterCfg.endpoint;
+  document.getElementById('s-meter-key').value = meterCfg.apiKey;
+
+  document.getElementById('s-print-width').value = getPrintWidth();
+  document.getElementById('s-boot-fee').value = getDefaultBootFee();
+  document.getElementById('s-courtesy-fee').value = getCourtesyFee();
+  document.getElementById('s-stealth-mode').checked = getStealthMode();
+  document.getElementById('s-auto-print').checked = getAutoPrint();
+  document.getElementById('s-mail-window').value = getMailWindowDays();
+
+  renderCodeEditor();
+}
+function saveProfileSettings() {
+  saveProfile({
+    department: document.getElementById('s-dept').value.trim() || 'City Parking Enforcement',
+    name: document.getElementById('s-name').value.trim(),
+    badge: document.getElementById('s-badge').value.trim()
+  });
+  boot();
+  showToast('Profile saved');
+}
+function saveSyncSettings() {
+  saveSyncConfig({
+    url: document.getElementById('s-sb-url').value.trim(),
+    key: document.getElementById('s-sb-key').value.trim(),
+    enabled: document.getElementById('s-sb-enabled').checked
+  });
+  updateSyncDot();
+  showToast('Sync settings saved');
+}
+function saveAISettings() {
+  saveAIConfig({
+    apiKey: document.getElementById('s-ai-key').value.trim(),
+    model: document.getElementById('s-ai-model').value
+  });
+  showToast('AI recognition settings saved');
+}
+function saveMeterVendorSettings() {
+  saveMeterVendorConfig({
+    vendor: document.getElementById('s-meter-vendor').value.trim(),
+    endpoint: document.getElementById('s-meter-endpoint').value.trim(),
+    apiKey: document.getElementById('s-meter-key').value.trim(),
+    connected: false
+  });
+  showToast('Saved — feed still simulated until a real vendor integration is wired in');
+}
+function savePrintSettings() {
+  savePrintWidth(document.getElementById('s-print-width').value);
+  showToast('Print settings saved');
+}
+function saveFeeSettings() {
+  saveDefaultBootFee(document.getElementById('s-boot-fee').value);
+  saveCourtesyFee(document.getElementById('s-courtesy-fee').value);
+  showToast('Fee settings saved');
+}
+function saveContactSettings() {
+  saveStealthMode(document.getElementById('s-stealth-mode').checked);
+  saveAutoPrint(document.getElementById('s-auto-print').checked);
+  saveMailWindowDays(document.getElementById('s-mail-window').value);
+  showToast('Low-contact settings saved');
+}
+function renderCodeEditor() {
+  const codes = getCodes();
+  const wrap = document.getElementById('code-editor');
+  wrap.innerHTML = '';
+  codes.forEach(function (code) {
+    const row = document.createElement('div');
+    row.className = 'code-edit-card';
+    row.innerHTML =
+      '<div class="code-edit-row">' +
+        '<select data-id="' + code.id + '" data-field="jurisdiction" style="flex:1;">' +
+          JURISDICTIONS.map(function (j) { return '<option value="' + j + '"' + (j === code.jurisdiction ? ' selected' : '') + '>' + j + '</option>'; }).join('') +
+        '</select>' +
+        '<input value="' + escapeHtml(code.code) + '" placeholder="Code section (e.g. VC 22500)" data-id="' + code.id + '" data-field="code" style="flex:2;" />' +
+        '<button onclick="removeCode(\'' + code.id + '\')">✕</button>' +
+      '</div>' +
+      '<div class="code-edit-row">' +
+        '<input value="' + escapeHtml(code.label) + '" placeholder="Violation label" data-id="' + code.id + '" data-field="label" style="flex:2;" />' +
+        '<input value="' + code.fine + '" type="number" placeholder="Fine $" data-id="' + code.id + '" data-field="fine" style="flex:1;" />' +
+      '</div>' +
+      '<label style="margin-top:8px;">Common remarks (one per line)</label>' +
+      '<textarea rows="2" data-id="' + code.id + '" data-field="remarks">' + escapeHtml((code.remarks || []).join('\n')) + '</textarea>' +
+      '<label style="margin-top:8px;">Payment link (optional — Stripe/Square/PayPal link for this exact fine amount)</label>' +
+      '<input value="' + escapeHtml(code.paymentLink || '') + '" placeholder="https://buy.stripe.com/..." data-id="' + code.id + '" data-field="paymentLink" />';
+    wrap.appendChild(row);
+  });
+  wrap.querySelectorAll('input, select, textarea').forEach(function (inp) {
+    inp.addEventListener('change', function () {
+      const codes = getCodes();
+      const c = codes.find(function (x) { return x.id === inp.dataset.id; });
+      if (!c) return;
+      const field = inp.dataset.field;
+      if (field === 'fine') c.fine = Number(inp.value) || 0;
+      else if (field === 'remarks') c.remarks = inp.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+      else c[field] = inp.value;
+      saveCodes(codes);
+    });
+  });
+}
+function addCode() {
+  const codes = getCodes();
+  codes.push({ id: 'c' + Date.now(), jurisdiction: 'city', code: '', label: 'New violation', fine: 50, remarks: [] });
+  saveCodes(codes);
+  renderCodeEditor();
+}
+function removeCode(id) {
+  let codes = getCodes();
+  codes = codes.filter(function (c) { return c.id !== id; });
+  saveCodes(codes);
+  renderCodeEditor();
+}
+function exportCSV() {
+  const all = getCitations();
+  if (all.length === 0) { showToast('No citations to export'); return; }
+  const cols = ['citationNumber','plate','vin','state','ownerName','vehicleMake','vehicleModel','vehicleColor','regStatus','regExpiry','paymentStatus','paymentDetail','violationCode','violationLabel','violationJurisdiction','fineAmount','feeType','serviceMethod','mailStatus','filedAt','mailedAt','locState','addressNote','notes','officerName','officerBadge','department','issuedAt','status','voidReason','priorCount','paymentReceived','paymentMethod','paymentAmount','paymentReceivedAt'];
+  const rows = [cols.join(',')];
+  all.forEach(function (c) {
+    rows.push(cols.map(function (k) {
+      const v = (c[k] === undefined || c[k] === null) ? '' : String(c[k]);
+      return '"' + v.replace(/"/g, '""') + '"';
+    }).join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'citations_export_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function clearAllData() {
+  if (!confirm('This permanently erases ALL local citation history on this device. This cannot be undone. Continue?')) return;
+  if (!confirm('Are you absolutely sure? Press OK again to confirm.')) return;
+  localStorage.removeItem(STORAGE_KEYS.citations);
+  localStorage.removeItem(STORAGE_KEYS.counter);
+  showToast('All local data cleared');
+  renderHome(); renderHistory();
+}
+
+document.addEventListener('DOMContentLoaded', initOnboarding);
+</script>
+</body>
+</html>
