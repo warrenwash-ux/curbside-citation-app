@@ -718,17 +718,10 @@ label {
 
       <div class="section-title">AI recognition (optional)</div>
       <div class="settings-card">
-        <h3>Connect your Anthropic API key</h3>
-        <p class="hint">Enables accurate plate reading and vehicle make/model/color recognition from photos — same bring-your-own-key pattern as your other tools. Costs apply on your own Anthropic account, typically a small fraction of a cent per scan. Without a key, the app still works using the basic on-device scanner and placeholder vehicle data.</p>
-        <label>Anthropic API key</label>
-        <input id="s-ai-key" type="password" placeholder="sk-ant-..." />
-        <label>Model</label>
-        <select id="s-ai-model">
-          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast &amp; low-cost (default)</option>
-          <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — slower, more accurate</option>
-        </select>
-        <button class="btn btn-amber" style="margin-top:12px;" onclick="saveAISettings()">Save AI settings</button>
-        <p class="hint" style="margin-top:10px;">Owner name, registration validity, and payment status stay simulated regardless of this setting — those require an actual DMV/payment-vendor data agreement, not an AI model.</p>
+        <h3>Cloud AI unavailable in this demonstration</h3>
+        <p class="hint">Use the on-device plate scanner or manual entry. Cloud vehicle recognition requires an authenticated server with protected credentials and usage limits before it can be enabled.</p>
+        <p class="hint">This version does not accept or store AI provider keys. Previously saved AI settings are removed from this browser when the app starts. Any previously exposed provider key must also be revoked with its provider.</p>
+        <p class="hint">Owner, registration, and payment details remain simulated.</p>
       </div>
 
       <div class="section-title">Live sync (optional)</div>
@@ -1235,8 +1228,15 @@ function saveCitations(list) { saveJSON(STORAGE_KEYS.citations, list); }
 function getSyncConfig() { return loadJSON(STORAGE_KEYS.sync, { url: '', key: '', enabled: false }); }
 function saveSyncConfig(cfg) { saveJSON(STORAGE_KEYS.sync, cfg); }
 
-function getAIConfig() { return loadJSON(STORAGE_KEYS.ai, { apiKey: '', model: 'claude-haiku-4-5-20251001' }); }
-function saveAIConfig(cfg) { saveJSON(STORAGE_KEYS.ai, cfg); }
+// No AI provider credentials are accepted by this static prototype.
+function clearLegacyAISettings() {
+  try { localStorage.removeItem(STORAGE_KEYS.ai); } catch (e) { /* Storage may be unavailable. */ }
+}
+function getAIConfig() {
+  clearLegacyAISettings();
+  return { enabled: false };
+}
+function saveAIConfig() { clearLegacyAISettings(); }
 
 function stripDataUrlPrefix(dataUrl) {
   const idx = dataUrl.indexOf(',');
@@ -1246,45 +1246,10 @@ function stripDataUrlPrefix(dataUrl) {
 const PLATE_VISION_PROMPT = 'You are reading a vehicle license plate in this photo for a parking citation app. Look carefully and respond with ONLY raw JSON, no markdown formatting, no extra commentary: {"plate": "<characters only: uppercase letters and digits, no spaces, dashes, or state name>"}. If no plate is clearly visible or you cannot read it confidently, respond exactly {"plate": null}.';
 const VEHICLE_VISION_PROMPT = 'You are looking at a photo of a parked vehicle for a parking citation app. Identify it as best you can. Respond with ONLY raw JSON, no markdown: {"make": "<manufacturer, or null if unsure>", "model": "<model, or null if unsure>", "color": "<color, or null if unsure>", "year": "<best estimate of model year, as a single year OR a range like 2018-2021 if you cannot narrow it further, or null if not confident enough to guess>"}. Use null rather than guessing if you are not reasonably confident about a field. Model year is often genuinely ambiguous across a generation/facelift cycle — prefer a range over a falsely precise single year when unsure.';
 
-/**
- * BYOK Claude vision call — same direct-browser-access pattern used across
- * the rest of your tools. Requires the officer's own Anthropic API key,
- * entered in Settings. Returns parsed JSON on success, or null on any
- * failure (missing key, network error, bad/unparseable response) so
- * callers can cleanly fall back to local OCR or manual entry.
- */
+/** Cloud AI stays disabled until an authenticated, rate-limited server is available. */
 async function callClaudeVision(base64Data, mediaType, promptText) {
-  const cfg = getAIConfig();
-  if (!cfg.apiKey) return null;
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': cfg.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: cfg.model || 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
-            { type: 'text', text: promptText }
-          ]
-        }]
-      })
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const textBlocks = (data.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; });
-    const raw = textBlocks.join('\n').replace(/```json|```/g, '').trim();
-    return JSON.parse(raw);
-  } catch (e) {
-    return null;
-  }
+  clearLegacyAISettings();
+  return null;
 }
 
 function nextCitationNumber(deptInitials) {
@@ -1503,6 +1468,7 @@ function selectOrOther(selectEl, otherInputId) {
 
 /* ---------------- ONBOARDING ---------------- */
 function initOnboarding() {
+  clearLegacyAISettings();
   const profile = getProfile();
   if (profile) {
     document.getElementById('app-shell').style.display = 'block';
@@ -1985,12 +1951,8 @@ function captureAndRecognize(forced) {
   const frameDataUrl = captureGuideFrame(video);
   const cfg = getAIConfig();
 
-  // With an AI key configured, EVERY cycle — continuous or manually forced —
-  // reads directly via Claude vision. This is what makes "always scanning"
-  // actually behave like LPR rather than a once-in-a-while lucky guess.
-  // Trade-off: this calls the API roughly every couple seconds while the
-  // camera is open and unpaused, not just when something is found.
-  if (cfg.apiKey) {
+  // Cloud recognition remains disabled until a protected server is implemented.
+  if (cfg.enabled) {
     if (!forced) updateScanStatus('Always scanning (AI) — point at a plate');
     const base64 = stripDataUrlPrefix(frameDataUrl);
     callClaudeVision(base64, 'image/jpeg', PLATE_VISION_PROMPT).then(function (result) {
@@ -2002,11 +1964,11 @@ function captureAndRecognize(forced) {
 
   if (typeof Tesseract === 'undefined') {
     scanBusy = false;
-    updateScanStatus('Scanner engine unavailable — add an API key in Settings → AI Recognition, or use manual entry below');
+    updateScanStatus('Scanner engine unavailable — use manual entry below');
     return;
   }
 
-  if (!forced) updateScanStatus('Basic scanner active — add an API key in Settings for LPR-grade accuracy');
+  if (!forced) updateScanStatus('On-device scanner active — verify the plate before continuing');
 
   Tesseract.recognize(frameDataUrl, 'eng', {
     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -2112,7 +2074,7 @@ function handleScanHit(text, frameDataUrl) {
   // identify make/model/color/year. Grab the full camera frame now and
   // run AI vision on it while the plate lookup is happening in parallel.
   const cfg = getAIConfig();
-  if (cfg.apiKey) {
+  if (cfg.enabled) {
     const video = document.getElementById('live-video');
     if (video && video.videoWidth) {
       const canvas = document.createElement('canvas');
@@ -2158,7 +2120,7 @@ function handleCapture(evt) {
     resizeImage(e.target.result, 800, function (resized) {
       if (draft) draft.photo = resized;
       const cfg = getAIConfig();
-      if (cfg.apiKey) {
+      if (cfg.enabled) {
         updateScanStatus('Reading uploaded photo with AI…');
         callClaudeVision(stripDataUrlPrefix(resized), 'image/jpeg', PLATE_VISION_PROMPT).then(function (result) {
           const plate = result && result.plate ? String(result.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
@@ -2196,13 +2158,13 @@ function handleCapture(evt) {
   reader.readAsDataURL(file);
 }
 
-/* ---------------- Vehicle photo recognition (make/model/color) — requires AI key ---------------- */
+/* ---------------- Vehicle photo recognition (make/model/color) — requires protected server ---------------- */
 function scanVehiclePhoto(evt) {
   const file = evt.target.files[0];
   if (!file) return;
   const cfg = getAIConfig();
-  if (!cfg.apiKey) {
-    showToast('Add an Anthropic API key in Settings to enable real vehicle recognition');
+  if (!cfg.enabled) {
+    showToast('Cloud vehicle recognition unavailable — enter vehicle details manually');
     evt.target.value = '';
     return;
   }
@@ -2640,9 +2602,7 @@ function renderSettings() {
   document.getElementById('s-sb-key').value = cfg.key;
   document.getElementById('s-sb-enabled').checked = cfg.enabled;
 
-  const aiCfg = getAIConfig();
-  document.getElementById('s-ai-key').value = aiCfg.apiKey;
-  document.getElementById('s-ai-model').value = aiCfg.model || 'claude-haiku-4-5-20251001';
+  clearLegacyAISettings();
 
   const meterCfg = getMeterVendorConfig();
   document.getElementById('s-meter-vendor').value = meterCfg.vendor;
@@ -2677,11 +2637,8 @@ function saveSyncSettings() {
   showToast('Sync settings saved');
 }
 function saveAISettings() {
-  saveAIConfig({
-    apiKey: document.getElementById('s-ai-key').value.trim(),
-    model: document.getElementById('s-ai-model').value
-  });
-  showToast('AI recognition settings saved');
+  clearLegacyAISettings();
+  showToast('Cloud AI requires a protected server; use local OCR or manual entry');
 }
 function saveMeterVendorSettings() {
   saveMeterVendorConfig({
