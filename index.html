@@ -468,6 +468,7 @@ label {
      APP SHELL
      ============================================================ -->
 <div id="app-shell" style="display:none;">
+  <p role="status" style="margin:0;padding:12px 18px;background:var(--amber);color:var(--ink);font-weight:600;">DEMONSTRATION ONLY — Vehicle records are simulated. Starter violation codes are placeholders. Citation issuance, filing for mail, and ticket printing are unavailable.</p>
   <div id="app">
 
     <div class="topbar">
@@ -2264,14 +2265,14 @@ function lookupVehicle() {
   else { draft.vin = value.toUpperCase(); draft.plate = ''; }
 
   document.getElementById('vehicle-section').style.display = 'block';
-  document.getElementById('lookup-status').innerHTML = '<div class="spinner"></div> Looking up record…';
+  document.getElementById('lookup-status').innerHTML = '<div class="spinner"></div> Generating simulated vehicle record…';
   document.getElementById('vehicle-fields').style.display = 'none';
 
   setTimeout(function () {
     const data = mockVehicleLookup(value);
     Object.assign(draft, data);
     fillVehicleFields(draft);
-    document.getElementById('lookup-status').innerHTML = '';
+    document.getElementById('lookup-status').textContent = 'SIMULATED — owner, registration, and payment details are fictional.';
     document.getElementById('vehicle-fields').style.display = 'block';
 
     const priors = priorCitationCount(value);
@@ -2419,9 +2420,7 @@ function resetLocation() {
 }
 
 function checkIssueReady() {
-  const hasId = draft && (draft.plate || draft.vin);
-  const hasCode = draft && draft.violationCodeId;
-  const ready = !!(hasId && hasCode);
+  const ready = false; // Prototype uses simulated records and unapproved codes.
   document.getElementById('issue-btn').disabled = !ready;
   const mailBtn = document.getElementById('file-mail-btn');
   if (mailBtn) mailBtn.disabled = !ready;
@@ -2452,31 +2451,7 @@ function collectDraftFields() {
 }
 
 function issueCitation() {
-  const profile = getProfile();
-  const issuedAt = collectDraftFields();
-
-  draft.id = 'cit_' + Date.now();
-  draft.citationNumber = nextCitationNumber(profile.department.replace(/[^A-Za-z]/g, '').slice(0, 3) || 'CIT');
-  draft.officerName = profile.name;
-  draft.officerBadge = profile.badge;
-  draft.department = profile.department;
-  draft.issuedAt = issuedAt;
-  draft.status = 'issued';
-  draft.serviceMethod = 'placed';
-  draft.mailStatus = null;
-  draft.priorCount = priorCitationCount(draft.plate || draft.vin || '');
-
-  const all = getCitations();
-  all.push(draft);
-  saveCitations(all);
-  syncToSupabase(draft, 'insert');
-
-  const issuedId = draft.id;
-  draft = null;
-  showToast('Citation issued');
-  showScreen('home');
-  openTicket(issuedId);
-  if (getAutoPrint()) setTimeout(printTicket, 300);
+  showToast('Demo only — citation issuance is unavailable');
 }
 
 /**
@@ -2488,31 +2463,7 @@ function issueCitation() {
  * process; this just preserves the evidence and flags it for that handoff.
  */
 function fileForMail() {
-  const profile = getProfile();
-  const issuedAt = collectDraftFields();
-
-  draft.id = 'cit_' + Date.now();
-  draft.citationNumber = nextCitationNumber(profile.department.replace(/[^A-Za-z]/g, '').slice(0, 3) || 'CIT');
-  draft.officerName = profile.name;
-  draft.officerBadge = profile.badge;
-  draft.department = profile.department;
-  draft.issuedAt = issuedAt;
-  draft.status = 'issued';
-  draft.serviceMethod = 'mail_pending';
-  draft.mailStatus = 'pending';
-  draft.filedAt = new Date().toISOString();
-  draft.priorCount = priorCitationCount(draft.plate || draft.vin || '');
-
-  const all = getCitations();
-  all.push(draft);
-  saveCitations(all);
-  syncToSupabase(draft, 'insert');
-
-  const issuedId = draft.id;
-  draft = null;
-  showToast('Filed for mail — vehicle left before citation could be placed');
-  showScreen('home');
-  openTicket(issuedId);
+  showToast('Demo only — filing for mail is unavailable');
 }
 
 /* ---------------- HISTORY ---------------- */
@@ -2654,13 +2605,7 @@ function ticketRow(k, v) {
   return '<div class="ticket-row"><span class="k">' + escapeHtml(k) + '</span><span class="v">' + escapeHtml(v || '—') + '</span></div>';
 }
 function printTicket() {
-  const ticketEl = document.querySelector('.ticket');
-  if (ticketEl) {
-    ticketEl.classList.remove('print-w-2', 'print-w-3', 'print-w-4');
-    const width = getPrintWidth();
-    if (width && width !== 'full') ticketEl.classList.add(width);
-  }
-  window.print();
+  showToast('Demo only — ticket printing is unavailable');
 }
 
 function closeTicket() {
