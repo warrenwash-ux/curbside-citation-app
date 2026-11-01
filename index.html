@@ -1324,12 +1324,18 @@ async function syncToSupabase(citation, action) {
       'Content-Type': 'application/json',
       'Prefer': 'return=minimal'
     };
+    let response;
     if (action === 'insert') {
-      await fetch(base, { method: 'POST', headers: headers, body: JSON.stringify(citation) });
+      response = await fetch(base, { method: 'POST', headers: headers, body: JSON.stringify(citation) });
     } else if (action === 'update') {
-      await fetch(base + '?id=eq.' + encodeURIComponent(citation.id), {
+      response = await fetch(base + '?id=eq.' + encodeURIComponent(citation.id), {
         method: 'PATCH', headers: headers, body: JSON.stringify(citation)
       });
+    } else {
+      return { ok: false, reason: 'invalid_action' };
+    }
+    if (!response.ok) {
+      return { ok: false, reason: 'http_error', status: response.status };
     }
     return { ok: true };
   } catch (e) {
@@ -1536,8 +1542,8 @@ function updateSyncDot() {
   const dot = document.getElementById('sync-dot');
   const label = document.getElementById('sync-label');
   if (cfg.enabled && cfg.url && cfg.key) {
-    dot.classList.remove('offline');
-    label.textContent = 'Live sync on';
+    dot.classList.add('offline');
+    label.textContent = 'Sync configured — delivery unverified';
   } else {
     dot.classList.add('offline');
     label.textContent = 'Local only';
