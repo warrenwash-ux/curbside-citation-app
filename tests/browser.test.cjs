@@ -33,6 +33,17 @@ async function run() {
       assert.equal(await page.locator('#s-ai-key').count(),0);
       await page.locator('[data-tab="draft"]').click();
       await page.waitForFunction(()=>document.getElementById('scan-status').textContent.includes('Camera unavailable'));
+      await page.evaluate(()=>{window.Tesseract={recognize:async()=>({data:{text:'abc123'}})};});
+      await page.locator('input[onchange="handleCapture(event)"]').setInputFiles({name:'invalid.txt',mimeType:'text/plain',buffer:Buffer.from('test')});
+      await page.waitForFunction(()=>document.getElementById('scan-status').textContent.includes('Choose a JPEG'));
+      await page.locator('input[onchange="handleCapture(event)"]').setInputFiles({name:'unreadable.png',mimeType:'image/png',buffer:Buffer.from('not an image')});
+      await page.waitForFunction(()=>document.getElementById('scan-status').textContent.includes('Could not read the photo'));
+      await page.locator('input[onchange="handleCapture(event)"]').setInputFiles({
+        name:'synthetic.png',mimeType:'image/png',
+        buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF1kAAAAASUVORK5CYII=','base64')
+      });
+      await page.waitForFunction(()=>document.getElementById('manual-plate').value==='ABC123');
+      assert.equal(await page.locator('#vehicle-section').isVisible(),false);
       await page.locator('#manual-plate').fill('ABC123');
       page.once('dialog',dialog=>dialog.dismiss());
       await page.getByRole('button',{name:'Confirm ID & show simulated record'}).click();
