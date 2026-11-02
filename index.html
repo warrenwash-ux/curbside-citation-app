@@ -565,9 +565,9 @@ label {
           <button class="pill" data-type="vin" onclick="setIdType('vin')">VIN</button>
         </div>
         <input id="manual-plate" style="margin-top:10px;" placeholder="Detected plate / VIN — editable" />
-        <button class="btn btn-amber" style="margin-top:10px;" onclick="lookupVehicle()">Look Up Vehicle</button>
+        <button class="btn btn-amber" style="margin-top:10px;" onclick="lookupVehicle()">Confirm ID &amp; show simulated record</button>
         <p class="lookup-status" id="lookup-status"></p>
-        <p class="hint">Always verify the plate matches the vehicle before issuing — no scanner, human or AI, is 100% accurate.</p>
+        <p class="hint">Compare the proposed ID with the vehicle, correct it if needed, then confirm. Scanning does not verify ownership or authorize a citation.</p>
         <p class="hint" style="margin-top:6px;">No camera available? <label style="text-decoration:underline;cursor:pointer;color:var(--amber);">Upload a photo instead<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handleCapture(event)" /></label></p>
 
         <label style="margin-top:14px;">Or check a digital pay station directly <span class="sim-badge">SIMULATED</span></label>
@@ -1934,7 +1934,7 @@ function updateScanStatus(msg) {
 
 function isPlausiblePlate(text) {
   if (!text) return false;
-  return text.length >= MIN_PLATE_LEN && text.length <= MAX_PLATE_LEN && /[A-Z]/.test(text) && /[0-9]/.test(text);
+  return typeof text === 'string' && text.length >= MIN_PLATE_LEN && text.length <= MAX_PLATE_LEN && /^[A-Z0-9]+$/.test(text) && /[A-Z]/.test(text) && /[0-9]/.test(text);
 }
 
 function captureAndRecognize(forced) {
@@ -2044,7 +2044,7 @@ function updateZoomUI() {
 function finalizePlateResult(aiResult, frameDataUrl, forced, fallbackText) {
   const aiPlate = aiResult && aiResult.plate ? String(aiResult.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
   const finalText = aiPlate || fallbackText || null;
-  if (!finalText) {
+  if (!isPlausiblePlate(finalText)) {
     updateScanStatus(forced ? 'AI could not read a plate — edit below or reposition' : 'Always scanning — point at a plate');
     return;
   }
@@ -2058,16 +2058,17 @@ function finalizePlateResult(aiResult, frameDataUrl, forced, fallbackText) {
 }
 
 function handleScanHit(text, frameDataUrl) {
+  if (!draft || !isPlausiblePlate(text)) return;
   const stealth = getStealthMode();
   if (!stealth && navigator.vibrate) navigator.vibrate(200);
   if (!stealth) flashScan();
   resizeImage(frameDataUrl, 800, function (resized) { if (draft) draft.photo = resized; });
-  updateScanStatus('Hit: ' + text + ' — reading vehicle…');
+  updateScanStatus('Proposed plate: ' + text + ' — compare with vehicle and confirm below');
   scanPaused = true;
   setPauseButtonLabel();
   document.getElementById('manual-plate').value = text;
   if (draft) draft.idType = 'plate';
-  lookupVehicle();
+  // Operator confirmation is required before generating any simulated record.
 
   // Automatically capture a full-frame shot for vehicle recognition —
   // the guide-box crop is good for reading the plate but too tight to
@@ -2127,7 +2128,7 @@ function handleCapture(evt) {
           if (plate) {
             document.getElementById('manual-plate').value = plate;
             updateScanStatus('Detected ' + plate + ' from photo');
-            lookupVehicle();
+            updateScanStatus('Proposed plate: ' + plate + ' — verify and confirm below');
           } else {
             updateScanStatus('AI could not read a plate in that photo — type it below');
           }
@@ -2146,7 +2147,7 @@ function handleCapture(evt) {
         document.getElementById('manual-plate').value = text;
         if (isPlausiblePlate(text)) {
           updateScanStatus('Detected ' + text + ' from photo');
-          lookupVehicle();
+          updateScanStatus('Proposed plate: ' + text + ' — verify and confirm below');
         } else {
           updateScanStatus(text ? 'Read "' + text + '" — check it below and tap Look Up' : 'Could not read the photo clearly — type the plate below');
         }
@@ -2221,8 +2222,15 @@ function resizeImage(dataUrl, maxWidth, callback) {
 }
 
 function lookupVehicle() {
-  const value = document.getElementById('manual-plate').value.trim();
+  if (!draft) return;
+  const value = document.getElementById('manual-plate').value.trim().toUpperCase();
   if (!value) { showToast('Enter a plate or VIN first'); return; }
+  const valid = draft.idType === 'plate' ? /^[A-Z0-9]{1,8}$/.test(value) : /^[A-HJ-NPR-Z0-9]{17}$/.test(value);
+  if (!valid) { showToast('Check the ID: plates require 1–8 letters/digits; VINs require 17 valid characters'); return; }
+  if (!window.confirm('Confirm this ID matches the vehicle: ' + value + '\nThe record shown next is simulated, not a verified vehicle record.')) return;
+  const targetDraft = draft;
+  const requestId = (targetDraft.lookupRequestId || 0) + 1;
+  targetDraft.lookupRequestId = requestId;
   if (draft.idType === 'plate') { draft.plate = value.toUpperCase(); draft.vin = ''; }
   else { draft.vin = value.toUpperCase(); draft.plate = ''; }
 
@@ -2231,6 +2239,7 @@ function lookupVehicle() {
   document.getElementById('vehicle-fields').style.display = 'none';
 
   setTimeout(function () {
+    if (draft !== targetDraft || targetDraft.lookupRequestId !== requestId) return;
     const data = mockVehicleLookup(value);
     Object.assign(draft, data);
     fillVehicleFields(draft);
