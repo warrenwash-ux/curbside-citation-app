@@ -1384,6 +1384,8 @@ let activeTicketId = null;
 let liveStream = null;
 let scanInterval = null;
 let scanBusy = false;
+let scanGeneration = 0;
+let plateConsensus = createPlateConsensus();
 let scanPaused = false;
 let lastHitPlate = null;
 let lastHitTime = 0;
@@ -1872,6 +1874,8 @@ function haltCitation() {
 
 /* ---------------- LIVE SCAN ("always awake" ALPR-style capture) ---------------- */
 async function startLiveScan() {
+  stopLiveScan();
+  const generation = scanGeneration, targetDraft = draft;
   scanPaused = false;
   setPauseButtonLabel();
   updateScanStatus('Starting camera…');
@@ -1880,7 +1884,12 @@ async function startLiveScan() {
     return;
   }
   try {
-    liveStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    if (scanGeneration !== generation || draft !== targetDraft) {
+      stream.getTracks().forEach(function (track) { track.stop(); });
+      return;
+    }
+    liveStream = stream;
     const video = document.getElementById('live-video');
     video.srcObject = liveStream;
     video.play().catch(function () {});
@@ -1903,12 +1912,16 @@ async function startLiveScan() {
     }
     updateZoomUI();
   } catch (e) {
+    if (scanGeneration !== generation || draft !== targetDraft) return;
     updateScanStatus('Camera unavailable (' + (e && e.name ? e.name : 'permission denied') + ') — use the options below');
     document.getElementById('live-scan-box').classList.remove('active');
   }
 }
 
 function stopLiveScan() {
+  scanGeneration++;
+  scanBusy = false;
+  plateConsensus.reset();
   clearInterval(scanInterval); scanInterval = null;
   if (liveStream) { liveStream.getTracks().forEach(function (t) { t.stop(); }); liveStream = null; }
   liveVideoTrack = null;
@@ -1919,6 +1932,9 @@ function stopLiveScan() {
 }
 
 function toggleScanPause() {
+  scanGeneration++;
+  scanBusy = false;
+  plateConsensus.reset();
   scanPaused = !scanPaused;
   setPauseButtonLabel();
   updateScanStatus(scanPaused ? 'Paused' : 'Always scanning — frame the plate in the box');
@@ -1937,59 +1953,57 @@ function isPlausiblePlate(text) {
   return typeof text === 'string' && text.length >= MIN_PLATE_LEN && text.length <= MAX_PLATE_LEN && /^[A-Z0-9]+$/.test(text) && /[A-Z]/.test(text) && /[0-9]/.test(text);
 }
 
+/** Two consecutive matching continuous frames within six seconds. A tap capture
+ * remains a single-frame proposal that still requires operator confirmation. */
+function createPlateConsensus() {
+  let candidate = null, lastAt = 0;
+  return {
+    reset: function () { candidate = null; lastAt = 0; },
+    observe: function (text, now) {
+      if (!isPlausiblePlate(text)) { this.reset(); return false; }
+      const agrees = text === candidate && now > lastAt && now - lastAt <= 6000;
+      candidate = text; lastAt = now;
+      return agrees;
+    }
+  };
+}
+
 function captureAndRecognize(forced) {
-  if (!forced && (!liveStream || scanPaused)) return;
-  if (scanBusy) return;
+  if (!draft || (!forced && (!liveStream || scanPaused)) || scanBusy) return;
   const video = document.getElementById('live-video');
   if (!video || !video.videoWidth) {
     if (forced) updateScanStatus('Camera not ready yet — try again in a second');
     return;
   }
-  scanBusy = true;
-  if (forced) updateScanStatus('Reading…');
-
-  const frameDataUrl = captureGuideFrame(video);
-  const cfg = getAIConfig();
-
-  // Cloud recognition remains disabled until a protected server is implemented.
-  if (cfg.enabled) {
-    if (!forced) updateScanStatus('Always scanning (AI) — point at a plate');
-    const base64 = stripDataUrlPrefix(frameDataUrl);
-    callClaudeVision(base64, 'image/jpeg', PLATE_VISION_PROMPT).then(function (result) {
-      scanBusy = false;
-      finalizePlateResult(result, frameDataUrl, forced, null);
-    });
-    return;
-  }
-
   if (typeof Tesseract === 'undefined') {
-    scanBusy = false;
     updateScanStatus('Scanner engine unavailable — use manual entry below');
     return;
   }
-
-  if (!forced) updateScanStatus('On-device scanner active — verify the plate before continuing');
-
-  Tesseract.recognize(frameDataUrl, 'eng', {
-    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const targetDraft = draft, generation = scanGeneration;
+  const current = function () { return draft === targetDraft && scanGeneration === generation; };
+  scanBusy = true;
+  if (forced) updateScanStatus('Reading…');
+  const frameDataUrl = captureGuideFrame(video);
+  Promise.resolve().then(function () {
+    if (!current()) return null;
+    return Tesseract.recognize(frameDataUrl, 'eng', {
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    });
   }).then(function (result) {
+    if (!current()) return;
     scanBusy = false;
-    const text = (result.data.text || '').replace(/[^A-Z0-9]/g, '').trim();
-    if (!isPlausiblePlate(text)) {
-      if (forced) updateScanStatus(text ? 'Read "' + text + '" — too short/long to trust, edit below' : 'Could not read a plate — edit below or reposition');
+    if (!result) return;
+    const text = (result.data.text || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    if (!forced && !plateConsensus.observe(text, Date.now())) {
+      updateScanStatus(isPlausiblePlate(text) ? 'Checking another frame for ' + text : 'Scanning — reposition or use manual entry');
       return;
     }
-    const now = Date.now();
-    const isFreshHit = forced || text !== lastHitPlate || (now - lastHitTime) > HIT_COOLDOWN_MS;
-    if (!isFreshHit) {
-      if (forced) updateScanStatus('Already scanned ' + text + ' — move to the next vehicle or edit below');
-      return;
-    }
-    lastHitPlate = text; lastHitTime = now;
-    handleScanHit(text, frameDataUrl);
+    finalizePlateResult(null, frameDataUrl, forced, text);
   }).catch(function () {
+    if (!current()) return;
     scanBusy = false;
-    if (forced) updateScanStatus('Scan failed — try again or use the options below');
+    plateConsensus.reset();
+    updateScanStatus('Scan failed — try again or use manual entry');
   });
 }
 
@@ -2062,7 +2076,8 @@ function handleScanHit(text, frameDataUrl) {
   const stealth = getStealthMode();
   if (!stealth && navigator.vibrate) navigator.vibrate(200);
   if (!stealth) flashScan();
-  resizeImage(frameDataUrl, 800, function (resized) { if (draft) draft.photo = resized; });
+  const targetDraft = draft;
+  resizeImage(frameDataUrl, 800, function (resized) { if (draft === targetDraft) targetDraft.photo = resized; });
   updateScanStatus('Proposed plate: ' + text + ' — compare with vehicle and confirm below');
   scanPaused = true;
   setPauseButtonLabel();
