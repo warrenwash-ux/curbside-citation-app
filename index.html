@@ -2131,71 +2131,66 @@ function setIdType(type) {
 /* ---------------- Fallback: upload a single photo (no live camera available) ---------------- */
 function handleCapture(evt) {
   const file = evt.target.files[0];
-  if (!file) return;
+  if (!file || !draft) return;
+  evt.target.value = ''; // Allow retrying the same file.
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
+    updateScanStatus('Choose a JPEG, PNG, or WebP photo up to 10 MB');
+    return;
+  }
+  stopLiveScan(); // A pending camera read must not replace an uploaded proposal.
+  setIdType('plate');
+  const targetDraft = draft;
+  const requestId = (targetDraft.uploadRequestId || 0) + 1;
+  targetDraft.uploadRequestId = requestId;
+  const input = document.getElementById('manual-plate');
+  const originalInput = input.value;
+  const generation = scanGeneration;
+  const current = function () {
+    return draft === targetDraft && targetDraft.uploadRequestId === requestId &&
+      scanGeneration === generation && targetDraft.idType === 'plate';
+  };
+  const failed = function () {
+    if (current()) updateScanStatus('Could not read the photo — choose another image or enter the plate manually');
+  };
   const reader = new FileReader();
+  reader.onerror = failed;
+  reader.onabort = failed;
   reader.onload = function (e) {
+    if (!current()) return;
     resizeImage(e.target.result, 800, function (resized) {
-      if (draft) draft.photo = resized;
-      const cfg = getAIConfig();
-      if (cfg.enabled) {
-        updateScanStatus('Reading uploaded photo with AI…');
-        callClaudeVision(stripDataUrlPrefix(resized), 'image/jpeg', PLATE_VISION_PROMPT).then(function (result) {
-          const plate = result && result.plate ? String(result.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
-          if (plate) {
-            document.getElementById('manual-plate').value = plate;
-            updateScanStatus('Detected ' + plate + ' from photo');
-            updateScanStatus('Proposed plate: ' + plate + ' — verify and confirm below');
-          } else {
-            updateScanStatus('AI could not read a plate in that photo — type it below');
-          }
-        });
-        return;
-      }
+      if (!current()) return;
+      targetDraft.photo = resized;
       updateScanStatus('Reading uploaded photo…');
       if (typeof Tesseract === 'undefined') {
         updateScanStatus('Scanner engine unavailable — type the plate manually below');
         return;
       }
-      Tesseract.recognize(resized, 'eng', {
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      Promise.resolve().then(function () {
+        if (!current()) return null;
+        return Tesseract.recognize(resized, 'eng', {
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        });
       }).then(function (result) {
-        const text = (result.data.text || '').replace(/[^A-Z0-9]/g, '').trim();
-        document.getElementById('manual-plate').value = text;
-        if (isPlausiblePlate(text)) {
-          updateScanStatus('Detected ' + text + ' from photo');
-          updateScanStatus('Proposed plate: ' + text + ' — verify and confirm below');
-        } else {
-          updateScanStatus(text ? 'Read "' + text + '" — check it below and tap Look Up' : 'Could not read the photo clearly — type the plate below');
+        if (!current() || !result) return;
+        if (input.value !== originalInput) {
+          updateScanStatus('Photo attached — your edited ID was kept; verify and confirm below');
+          return;
         }
-      }).catch(function () {
-        updateScanStatus('Could not read the photo — type the plate manually below');
-      });
-    });
+        const text = (result.data.text || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+        input.value = text;
+        updateScanStatus(isPlausiblePlate(text) ? 'Proposed plate: ' + text + ' — verify and confirm below' :
+          'Could not read a reliable plate — enter it manually and confirm below');
+      }).catch(failed);
+    }, failed);
   };
+  updateScanStatus('Loading photo…');
   reader.readAsDataURL(file);
 }
 
-/* ---------------- Vehicle photo recognition (make/model/color) — requires protected server ---------------- */
+/* Cloud vehicle recognition is disabled until a protected server is available. */
 function scanVehiclePhoto(evt) {
-  const file = evt.target.files[0];
-  if (!file) return;
-  const cfg = getAIConfig();
-  if (!cfg.enabled) {
-    showToast('Cloud vehicle recognition unavailable — enter vehicle details manually');
-    evt.target.value = '';
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    resizeImage(e.target.result, 800, function (resized) {
-      updateVehiclePhotoStatus('Identifying vehicle…');
-      callClaudeVision(stripDataUrlPrefix(resized), 'image/jpeg', VEHICLE_VISION_PROMPT).then(function (result) {
-        if (!result) { updateVehiclePhotoStatus('Could not identify the vehicle — fill in manually below'); return; }
-        applyVehiclePhotoResult(result);
-      });
-    });
-  };
-  reader.readAsDataURL(file);
+  evt.target.value = '';
+  showToast('Cloud vehicle recognition unavailable — enter vehicle details manually');
 }
 function applyVehiclePhotoResult(result) {
   const filled = [];
@@ -2223,7 +2218,7 @@ function updateVehiclePhotoStatus(msg) {
   if (el) el.textContent = msg;
 }
 
-function resizeImage(dataUrl, maxWidth, callback) {
+function resizeImage(dataUrl, maxWidth, callback, onError) {
   const img = new Image();
   img.onload = function () {
     const scale = Math.min(1, maxWidth / img.width);
@@ -2234,6 +2229,7 @@ function resizeImage(dataUrl, maxWidth, callback) {
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     callback(canvas.toDataURL('image/jpeg', 0.7));
   };
+  img.onerror = function () { if (onError) onError(); };
   img.src = dataUrl;
 }
 
@@ -2246,6 +2242,7 @@ function lookupVehicle() {
   if (!window.confirm('Confirm this ID matches the vehicle: ' + value + '\nThe record shown next is simulated, not a verified vehicle record.')) return;
   const targetDraft = draft;
   const requestId = (targetDraft.lookupRequestId || 0) + 1;
+  targetDraft.uploadRequestId = (targetDraft.uploadRequestId || 0) + 1;
   targetDraft.lookupRequestId = requestId;
   if (draft.idType === 'plate') { draft.plate = value.toUpperCase(); draft.vin = ''; }
   else { draft.vin = value.toUpperCase(); draft.plate = ''; }
