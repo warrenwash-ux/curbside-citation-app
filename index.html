@@ -468,6 +468,7 @@ label {
      APP SHELL
      ============================================================ -->
 <div id="app-shell" style="display:none;">
+  <p role="status" style="margin:0;padding:12px 18px;background:var(--amber);color:var(--ink);font-weight:600;">DEMONSTRATION ONLY — Vehicle records are simulated. Starter violation codes are placeholders. Citation issuance, filing for mail, and ticket printing are unavailable.</p>
   <div id="app">
 
     <div class="topbar">
@@ -564,9 +565,9 @@ label {
           <button class="pill" data-type="vin" onclick="setIdType('vin')">VIN</button>
         </div>
         <input id="manual-plate" style="margin-top:10px;" placeholder="Detected plate / VIN — editable" />
-        <button class="btn btn-amber" style="margin-top:10px;" onclick="lookupVehicle()">Look Up Vehicle</button>
+        <button class="btn btn-amber" style="margin-top:10px;" onclick="lookupVehicle()">Confirm ID &amp; show simulated record</button>
         <p class="lookup-status" id="lookup-status"></p>
-        <p class="hint">Always verify the plate matches the vehicle before issuing — no scanner, human or AI, is 100% accurate.</p>
+        <p class="hint">Compare the proposed ID with the vehicle, correct it if needed, then confirm. Scanning does not verify ownership or authorize a citation.</p>
         <p class="hint" style="margin-top:6px;">No camera available? <label style="text-decoration:underline;cursor:pointer;color:var(--amber);">Upload a photo instead<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handleCapture(event)" /></label></p>
 
         <label style="margin-top:14px;">Or check a digital pay station directly <span class="sim-badge">SIMULATED</span></label>
@@ -717,17 +718,10 @@ label {
 
       <div class="section-title">AI recognition (optional)</div>
       <div class="settings-card">
-        <h3>Connect your Anthropic API key</h3>
-        <p class="hint">Enables accurate plate reading and vehicle make/model/color recognition from photos — same bring-your-own-key pattern as your other tools. Costs apply on your own Anthropic account, typically a small fraction of a cent per scan. Without a key, the app still works using the basic on-device scanner and placeholder vehicle data.</p>
-        <label>Anthropic API key</label>
-        <input id="s-ai-key" type="password" placeholder="sk-ant-..." />
-        <label>Model</label>
-        <select id="s-ai-model">
-          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast &amp; low-cost (default)</option>
-          <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — slower, more accurate</option>
-        </select>
-        <button class="btn btn-amber" style="margin-top:12px;" onclick="saveAISettings()">Save AI settings</button>
-        <p class="hint" style="margin-top:10px;">Owner name, registration validity, and payment status stay simulated regardless of this setting — those require an actual DMV/payment-vendor data agreement, not an AI model.</p>
+        <h3>Cloud AI unavailable in this demonstration</h3>
+        <p class="hint">Use the on-device plate scanner or manual entry. Cloud vehicle recognition requires an authenticated server with protected credentials and usage limits before it can be enabled.</p>
+        <p class="hint">This version does not accept or store AI provider keys. Previously saved AI settings are removed from this browser when the app starts. Any previously exposed provider key must also be revoked with its provider.</p>
+        <p class="hint">Owner, registration, and payment details remain simulated.</p>
       </div>
 
       <div class="section-title">Live sync (optional)</div>
@@ -1234,8 +1228,15 @@ function saveCitations(list) { saveJSON(STORAGE_KEYS.citations, list); }
 function getSyncConfig() { return loadJSON(STORAGE_KEYS.sync, { url: '', key: '', enabled: false }); }
 function saveSyncConfig(cfg) { saveJSON(STORAGE_KEYS.sync, cfg); }
 
-function getAIConfig() { return loadJSON(STORAGE_KEYS.ai, { apiKey: '', model: 'claude-haiku-4-5-20251001' }); }
-function saveAIConfig(cfg) { saveJSON(STORAGE_KEYS.ai, cfg); }
+// No AI provider credentials are accepted by this static prototype.
+function clearLegacyAISettings() {
+  try { localStorage.removeItem(STORAGE_KEYS.ai); } catch (e) { /* Storage may be unavailable. */ }
+}
+function getAIConfig() {
+  clearLegacyAISettings();
+  return { enabled: false };
+}
+function saveAIConfig() { clearLegacyAISettings(); }
 
 function stripDataUrlPrefix(dataUrl) {
   const idx = dataUrl.indexOf(',');
@@ -1245,45 +1246,10 @@ function stripDataUrlPrefix(dataUrl) {
 const PLATE_VISION_PROMPT = 'You are reading a vehicle license plate in this photo for a parking citation app. Look carefully and respond with ONLY raw JSON, no markdown formatting, no extra commentary: {"plate": "<characters only: uppercase letters and digits, no spaces, dashes, or state name>"}. If no plate is clearly visible or you cannot read it confidently, respond exactly {"plate": null}.';
 const VEHICLE_VISION_PROMPT = 'You are looking at a photo of a parked vehicle for a parking citation app. Identify it as best you can. Respond with ONLY raw JSON, no markdown: {"make": "<manufacturer, or null if unsure>", "model": "<model, or null if unsure>", "color": "<color, or null if unsure>", "year": "<best estimate of model year, as a single year OR a range like 2018-2021 if you cannot narrow it further, or null if not confident enough to guess>"}. Use null rather than guessing if you are not reasonably confident about a field. Model year is often genuinely ambiguous across a generation/facelift cycle — prefer a range over a falsely precise single year when unsure.';
 
-/**
- * BYOK Claude vision call — same direct-browser-access pattern used across
- * the rest of your tools. Requires the officer's own Anthropic API key,
- * entered in Settings. Returns parsed JSON on success, or null on any
- * failure (missing key, network error, bad/unparseable response) so
- * callers can cleanly fall back to local OCR or manual entry.
- */
+/** Cloud AI stays disabled until an authenticated, rate-limited server is available. */
 async function callClaudeVision(base64Data, mediaType, promptText) {
-  const cfg = getAIConfig();
-  if (!cfg.apiKey) return null;
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': cfg.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: cfg.model || 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
-            { type: 'text', text: promptText }
-          ]
-        }]
-      })
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const textBlocks = (data.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; });
-    const raw = textBlocks.join('\n').replace(/```json|```/g, '').trim();
-    return JSON.parse(raw);
-  } catch (e) {
-    return null;
-  }
+  clearLegacyAISettings();
+  return null;
 }
 
 function nextCitationNumber(deptInitials) {
@@ -1324,12 +1290,18 @@ async function syncToSupabase(citation, action) {
       'Content-Type': 'application/json',
       'Prefer': 'return=minimal'
     };
+    let response;
     if (action === 'insert') {
-      await fetch(base, { method: 'POST', headers: headers, body: JSON.stringify(citation) });
+      response = await fetch(base, { method: 'POST', headers: headers, body: JSON.stringify(citation) });
     } else if (action === 'update') {
-      await fetch(base + '?id=eq.' + encodeURIComponent(citation.id), {
+      response = await fetch(base + '?id=eq.' + encodeURIComponent(citation.id), {
         method: 'PATCH', headers: headers, body: JSON.stringify(citation)
       });
+    } else {
+      return { ok: false, reason: 'invalid_action' };
+    }
+    if (!response.ok) {
+      return { ok: false, reason: 'http_error', status: response.status };
     }
     return { ok: true };
   } catch (e) {
@@ -1412,6 +1384,8 @@ let activeTicketId = null;
 let liveStream = null;
 let scanInterval = null;
 let scanBusy = false;
+let scanGeneration = 0;
+let plateConsensus = createPlateConsensus();
 let scanPaused = false;
 let lastHitPlate = null;
 let lastHitTime = 0;
@@ -1435,6 +1409,7 @@ function showScreen(name) {
   if (name !== 'draft') stopLiveScan();
   document.querySelectorAll('.screen').forEach(function (s) { s.classList.remove('active'); });
   document.getElementById('screen-' + name).classList.add('active');
+  window.scrollTo(0, 0);
   document.querySelectorAll('.tab').forEach(function (t) {
     t.classList.toggle('active', t.dataset.tab === name);
   });
@@ -1496,6 +1471,7 @@ function selectOrOther(selectEl, otherInputId) {
 
 /* ---------------- ONBOARDING ---------------- */
 function initOnboarding() {
+  clearLegacyAISettings();
   const profile = getProfile();
   if (profile) {
     document.getElementById('app-shell').style.display = 'block';
@@ -1536,8 +1512,8 @@ function updateSyncDot() {
   const dot = document.getElementById('sync-dot');
   const label = document.getElementById('sync-label');
   if (cfg.enabled && cfg.url && cfg.key) {
-    dot.classList.remove('offline');
-    label.textContent = 'Live sync on';
+    dot.classList.add('offline');
+    label.textContent = 'Sync configured — delivery unverified';
   } else {
     dot.classList.add('offline');
     label.textContent = 'Local only';
@@ -1899,6 +1875,8 @@ function haltCitation() {
 
 /* ---------------- LIVE SCAN ("always awake" ALPR-style capture) ---------------- */
 async function startLiveScan() {
+  stopLiveScan();
+  const generation = scanGeneration, targetDraft = draft;
   scanPaused = false;
   setPauseButtonLabel();
   updateScanStatus('Starting camera…');
@@ -1907,7 +1885,12 @@ async function startLiveScan() {
     return;
   }
   try {
-    liveStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    if (scanGeneration !== generation || draft !== targetDraft) {
+      stream.getTracks().forEach(function (track) { track.stop(); });
+      return;
+    }
+    liveStream = stream;
     const video = document.getElementById('live-video');
     video.srcObject = liveStream;
     video.play().catch(function () {});
@@ -1930,12 +1913,16 @@ async function startLiveScan() {
     }
     updateZoomUI();
   } catch (e) {
+    if (scanGeneration !== generation || draft !== targetDraft) return;
     updateScanStatus('Camera unavailable (' + (e && e.name ? e.name : 'permission denied') + ') — use the options below');
     document.getElementById('live-scan-box').classList.remove('active');
   }
 }
 
 function stopLiveScan() {
+  scanGeneration++;
+  scanBusy = false;
+  plateConsensus.reset();
   clearInterval(scanInterval); scanInterval = null;
   if (liveStream) { liveStream.getTracks().forEach(function (t) { t.stop(); }); liveStream = null; }
   liveVideoTrack = null;
@@ -1946,6 +1933,9 @@ function stopLiveScan() {
 }
 
 function toggleScanPause() {
+  scanGeneration++;
+  scanBusy = false;
+  plateConsensus.reset();
   scanPaused = !scanPaused;
   setPauseButtonLabel();
   updateScanStatus(scanPaused ? 'Paused' : 'Always scanning — frame the plate in the box');
@@ -1961,66 +1951,60 @@ function updateScanStatus(msg) {
 
 function isPlausiblePlate(text) {
   if (!text) return false;
-  return text.length >= MIN_PLATE_LEN && text.length <= MAX_PLATE_LEN && /[A-Z]/.test(text) && /[0-9]/.test(text);
+  return typeof text === 'string' && text.length >= MIN_PLATE_LEN && text.length <= MAX_PLATE_LEN && /^[A-Z0-9]+$/.test(text) && /[A-Z]/.test(text) && /[0-9]/.test(text);
+}
+
+/** Two consecutive matching continuous frames within six seconds. A tap capture
+ * remains a single-frame proposal that still requires operator confirmation. */
+function createPlateConsensus() {
+  let candidate = null, lastAt = 0;
+  return {
+    reset: function () { candidate = null; lastAt = 0; },
+    observe: function (text, now) {
+      if (!isPlausiblePlate(text)) { this.reset(); return false; }
+      const agrees = text === candidate && now > lastAt && now - lastAt <= 6000;
+      candidate = text; lastAt = now;
+      return agrees;
+    }
+  };
 }
 
 function captureAndRecognize(forced) {
-  if (!forced && (!liveStream || scanPaused)) return;
-  if (scanBusy) return;
+  if (!draft || (!forced && (!liveStream || scanPaused)) || scanBusy) return;
   const video = document.getElementById('live-video');
   if (!video || !video.videoWidth) {
     if (forced) updateScanStatus('Camera not ready yet — try again in a second');
     return;
   }
+  if (typeof Tesseract === 'undefined') {
+    updateScanStatus('Scanner engine unavailable — use manual entry below');
+    return;
+  }
+  const targetDraft = draft, generation = scanGeneration;
+  const current = function () { return draft === targetDraft && scanGeneration === generation; };
   scanBusy = true;
   if (forced) updateScanStatus('Reading…');
-
   const frameDataUrl = captureGuideFrame(video);
-  const cfg = getAIConfig();
-
-  // With an AI key configured, EVERY cycle — continuous or manually forced —
-  // reads directly via Claude vision. This is what makes "always scanning"
-  // actually behave like LPR rather than a once-in-a-while lucky guess.
-  // Trade-off: this calls the API roughly every couple seconds while the
-  // camera is open and unpaused, not just when something is found.
-  if (cfg.apiKey) {
-    if (!forced) updateScanStatus('Always scanning (AI) — point at a plate');
-    const base64 = stripDataUrlPrefix(frameDataUrl);
-    callClaudeVision(base64, 'image/jpeg', PLATE_VISION_PROMPT).then(function (result) {
-      scanBusy = false;
-      finalizePlateResult(result, frameDataUrl, forced, null);
+  Promise.resolve().then(function () {
+    if (!current()) return null;
+    return Tesseract.recognize(frameDataUrl, 'eng', {
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     });
-    return;
-  }
-
-  if (typeof Tesseract === 'undefined') {
-    scanBusy = false;
-    updateScanStatus('Scanner engine unavailable — add an API key in Settings → AI Recognition, or use manual entry below');
-    return;
-  }
-
-  if (!forced) updateScanStatus('Basic scanner active — add an API key in Settings for LPR-grade accuracy');
-
-  Tesseract.recognize(frameDataUrl, 'eng', {
-    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   }).then(function (result) {
+    if (!current()) return;
     scanBusy = false;
-    const text = (result.data.text || '').replace(/[^A-Z0-9]/g, '').trim();
-    if (!isPlausiblePlate(text)) {
-      if (forced) updateScanStatus(text ? 'Read "' + text + '" — too short/long to trust, edit below' : 'Could not read a plate — edit below or reposition');
+    if (!result) return;
+    const text = (result.data.text || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    if (!forced && !plateConsensus.observe(text, Date.now())) {
+      updateScanStatus(isPlausiblePlate(text) ? 'Checking another frame for ' + text : 'Scanning — reposition or use manual entry');
       return;
     }
-    const now = Date.now();
-    const isFreshHit = forced || text !== lastHitPlate || (now - lastHitTime) > HIT_COOLDOWN_MS;
-    if (!isFreshHit) {
-      if (forced) updateScanStatus('Already scanned ' + text + ' — move to the next vehicle or edit below');
-      return;
-    }
-    lastHitPlate = text; lastHitTime = now;
-    handleScanHit(text, frameDataUrl);
+    finalizePlateResult(null, frameDataUrl, forced, text);
   }).catch(function () {
+    if (!current()) return;
     scanBusy = false;
-    if (forced) updateScanStatus('Scan failed — try again or use the options below');
+    plateConsensus.reset();
+    updateScanStatus('Scan failed — try again or use manual entry');
   });
 }
 
@@ -2075,7 +2059,7 @@ function updateZoomUI() {
 function finalizePlateResult(aiResult, frameDataUrl, forced, fallbackText) {
   const aiPlate = aiResult && aiResult.plate ? String(aiResult.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
   const finalText = aiPlate || fallbackText || null;
-  if (!finalText) {
+  if (!isPlausiblePlate(finalText)) {
     updateScanStatus(forced ? 'AI could not read a plate — edit below or reposition' : 'Always scanning — point at a plate');
     return;
   }
@@ -2089,23 +2073,25 @@ function finalizePlateResult(aiResult, frameDataUrl, forced, fallbackText) {
 }
 
 function handleScanHit(text, frameDataUrl) {
+  if (!draft || !isPlausiblePlate(text)) return;
   const stealth = getStealthMode();
   if (!stealth && navigator.vibrate) navigator.vibrate(200);
   if (!stealth) flashScan();
-  resizeImage(frameDataUrl, 800, function (resized) { if (draft) draft.photo = resized; });
-  updateScanStatus('Hit: ' + text + ' — reading vehicle…');
+  const targetDraft = draft;
+  resizeImage(frameDataUrl, 800, function (resized) { if (draft === targetDraft) targetDraft.photo = resized; });
+  updateScanStatus('Proposed plate: ' + text + ' — compare with vehicle and confirm below');
   scanPaused = true;
   setPauseButtonLabel();
   document.getElementById('manual-plate').value = text;
   if (draft) draft.idType = 'plate';
-  lookupVehicle();
+  // Operator confirmation is required before generating any simulated record.
 
   // Automatically capture a full-frame shot for vehicle recognition —
   // the guide-box crop is good for reading the plate but too tight to
   // identify make/model/color/year. Grab the full camera frame now and
   // run AI vision on it while the plate lookup is happening in parallel.
   const cfg = getAIConfig();
-  if (cfg.apiKey) {
+  if (cfg.enabled) {
     const video = document.getElementById('live-video');
     if (video && video.videoWidth) {
       const canvas = document.createElement('canvas');
@@ -2145,71 +2131,66 @@ function setIdType(type) {
 /* ---------------- Fallback: upload a single photo (no live camera available) ---------------- */
 function handleCapture(evt) {
   const file = evt.target.files[0];
-  if (!file) return;
+  if (!file || !draft) return;
+  evt.target.value = ''; // Allow retrying the same file.
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
+    updateScanStatus('Choose a JPEG, PNG, or WebP photo up to 10 MB');
+    return;
+  }
+  stopLiveScan(); // A pending camera read must not replace an uploaded proposal.
+  setIdType('plate');
+  const targetDraft = draft;
+  const requestId = (targetDraft.uploadRequestId || 0) + 1;
+  targetDraft.uploadRequestId = requestId;
+  const input = document.getElementById('manual-plate');
+  const originalInput = input.value;
+  const generation = scanGeneration;
+  const current = function () {
+    return draft === targetDraft && targetDraft.uploadRequestId === requestId &&
+      scanGeneration === generation && targetDraft.idType === 'plate';
+  };
+  const failed = function () {
+    if (current()) updateScanStatus('Could not read the photo — choose another image or enter the plate manually');
+  };
   const reader = new FileReader();
+  reader.onerror = failed;
+  reader.onabort = failed;
   reader.onload = function (e) {
+    if (!current()) return;
     resizeImage(e.target.result, 800, function (resized) {
-      if (draft) draft.photo = resized;
-      const cfg = getAIConfig();
-      if (cfg.apiKey) {
-        updateScanStatus('Reading uploaded photo with AI…');
-        callClaudeVision(stripDataUrlPrefix(resized), 'image/jpeg', PLATE_VISION_PROMPT).then(function (result) {
-          const plate = result && result.plate ? String(result.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
-          if (plate) {
-            document.getElementById('manual-plate').value = plate;
-            updateScanStatus('Detected ' + plate + ' from photo');
-            lookupVehicle();
-          } else {
-            updateScanStatus('AI could not read a plate in that photo — type it below');
-          }
-        });
-        return;
-      }
+      if (!current()) return;
+      targetDraft.photo = resized;
       updateScanStatus('Reading uploaded photo…');
       if (typeof Tesseract === 'undefined') {
         updateScanStatus('Scanner engine unavailable — type the plate manually below');
         return;
       }
-      Tesseract.recognize(resized, 'eng', {
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      Promise.resolve().then(function () {
+        if (!current()) return null;
+        return Tesseract.recognize(resized, 'eng', {
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        });
       }).then(function (result) {
-        const text = (result.data.text || '').replace(/[^A-Z0-9]/g, '').trim();
-        document.getElementById('manual-plate').value = text;
-        if (isPlausiblePlate(text)) {
-          updateScanStatus('Detected ' + text + ' from photo');
-          lookupVehicle();
-        } else {
-          updateScanStatus(text ? 'Read "' + text + '" — check it below and tap Look Up' : 'Could not read the photo clearly — type the plate below');
+        if (!current() || !result) return;
+        if (input.value !== originalInput) {
+          updateScanStatus('Photo attached — your edited ID was kept; verify and confirm below');
+          return;
         }
-      }).catch(function () {
-        updateScanStatus('Could not read the photo — type the plate manually below');
-      });
-    });
+        const text = (result.data.text || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+        input.value = text;
+        updateScanStatus(isPlausiblePlate(text) ? 'Proposed plate: ' + text + ' — verify and confirm below' :
+          'Could not read a reliable plate — enter it manually and confirm below');
+      }).catch(failed);
+    }, failed);
   };
+  updateScanStatus('Loading photo…');
   reader.readAsDataURL(file);
 }
 
-/* ---------------- Vehicle photo recognition (make/model/color) — requires AI key ---------------- */
+/* Cloud vehicle recognition is disabled until a protected server is available. */
 function scanVehiclePhoto(evt) {
-  const file = evt.target.files[0];
-  if (!file) return;
-  const cfg = getAIConfig();
-  if (!cfg.apiKey) {
-    showToast('Add an Anthropic API key in Settings to enable real vehicle recognition');
-    evt.target.value = '';
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    resizeImage(e.target.result, 800, function (resized) {
-      updateVehiclePhotoStatus('Identifying vehicle…');
-      callClaudeVision(stripDataUrlPrefix(resized), 'image/jpeg', VEHICLE_VISION_PROMPT).then(function (result) {
-        if (!result) { updateVehiclePhotoStatus('Could not identify the vehicle — fill in manually below'); return; }
-        applyVehiclePhotoResult(result);
-      });
-    });
-  };
-  reader.readAsDataURL(file);
+  evt.target.value = '';
+  showToast('Cloud vehicle recognition unavailable — enter vehicle details manually');
 }
 function applyVehiclePhotoResult(result) {
   const filled = [];
@@ -2237,7 +2218,7 @@ function updateVehiclePhotoStatus(msg) {
   if (el) el.textContent = msg;
 }
 
-function resizeImage(dataUrl, maxWidth, callback) {
+function resizeImage(dataUrl, maxWidth, callback, onError) {
   const img = new Image();
   img.onload = function () {
     const scale = Math.min(1, maxWidth / img.width);
@@ -2248,24 +2229,34 @@ function resizeImage(dataUrl, maxWidth, callback) {
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     callback(canvas.toDataURL('image/jpeg', 0.7));
   };
+  img.onerror = function () { if (onError) onError(); };
   img.src = dataUrl;
 }
 
 function lookupVehicle() {
-  const value = document.getElementById('manual-plate').value.trim();
+  if (!draft) return;
+  const value = document.getElementById('manual-plate').value.trim().toUpperCase();
   if (!value) { showToast('Enter a plate or VIN first'); return; }
+  const valid = draft.idType === 'plate' ? /^[A-Z0-9]{1,8}$/.test(value) : /^[A-HJ-NPR-Z0-9]{17}$/.test(value);
+  if (!valid) { showToast('Check the ID: plates require 1–8 letters/digits; VINs require 17 valid characters'); return; }
+  if (!window.confirm('Confirm this ID matches the vehicle: ' + value + '\nThe record shown next is simulated, not a verified vehicle record.')) return;
+  const targetDraft = draft;
+  const requestId = (targetDraft.lookupRequestId || 0) + 1;
+  targetDraft.uploadRequestId = (targetDraft.uploadRequestId || 0) + 1;
+  targetDraft.lookupRequestId = requestId;
   if (draft.idType === 'plate') { draft.plate = value.toUpperCase(); draft.vin = ''; }
   else { draft.vin = value.toUpperCase(); draft.plate = ''; }
 
   document.getElementById('vehicle-section').style.display = 'block';
-  document.getElementById('lookup-status').innerHTML = '<div class="spinner"></div> Looking up record…';
+  document.getElementById('lookup-status').innerHTML = '<div class="spinner"></div> Generating simulated vehicle record…';
   document.getElementById('vehicle-fields').style.display = 'none';
 
   setTimeout(function () {
+    if (draft !== targetDraft || targetDraft.lookupRequestId !== requestId) return;
     const data = mockVehicleLookup(value);
     Object.assign(draft, data);
     fillVehicleFields(draft);
-    document.getElementById('lookup-status').innerHTML = '';
+    document.getElementById('lookup-status').textContent = 'SIMULATED — owner, registration, and payment details are fictional.';
     document.getElementById('vehicle-fields').style.display = 'block';
 
     const priors = priorCitationCount(value);
@@ -2413,9 +2404,7 @@ function resetLocation() {
 }
 
 function checkIssueReady() {
-  const hasId = draft && (draft.plate || draft.vin);
-  const hasCode = draft && draft.violationCodeId;
-  const ready = !!(hasId && hasCode);
+  const ready = false; // Prototype uses simulated records and unapproved codes.
   document.getElementById('issue-btn').disabled = !ready;
   const mailBtn = document.getElementById('file-mail-btn');
   if (mailBtn) mailBtn.disabled = !ready;
@@ -2446,31 +2435,7 @@ function collectDraftFields() {
 }
 
 function issueCitation() {
-  const profile = getProfile();
-  const issuedAt = collectDraftFields();
-
-  draft.id = 'cit_' + Date.now();
-  draft.citationNumber = nextCitationNumber(profile.department.replace(/[^A-Za-z]/g, '').slice(0, 3) || 'CIT');
-  draft.officerName = profile.name;
-  draft.officerBadge = profile.badge;
-  draft.department = profile.department;
-  draft.issuedAt = issuedAt;
-  draft.status = 'issued';
-  draft.serviceMethod = 'placed';
-  draft.mailStatus = null;
-  draft.priorCount = priorCitationCount(draft.plate || draft.vin || '');
-
-  const all = getCitations();
-  all.push(draft);
-  saveCitations(all);
-  syncToSupabase(draft, 'insert');
-
-  const issuedId = draft.id;
-  draft = null;
-  showToast('Citation issued');
-  showScreen('home');
-  openTicket(issuedId);
-  if (getAutoPrint()) setTimeout(printTicket, 300);
+  showToast('Demo only — citation issuance is unavailable');
 }
 
 /**
@@ -2482,31 +2447,7 @@ function issueCitation() {
  * process; this just preserves the evidence and flags it for that handoff.
  */
 function fileForMail() {
-  const profile = getProfile();
-  const issuedAt = collectDraftFields();
-
-  draft.id = 'cit_' + Date.now();
-  draft.citationNumber = nextCitationNumber(profile.department.replace(/[^A-Za-z]/g, '').slice(0, 3) || 'CIT');
-  draft.officerName = profile.name;
-  draft.officerBadge = profile.badge;
-  draft.department = profile.department;
-  draft.issuedAt = issuedAt;
-  draft.status = 'issued';
-  draft.serviceMethod = 'mail_pending';
-  draft.mailStatus = 'pending';
-  draft.filedAt = new Date().toISOString();
-  draft.priorCount = priorCitationCount(draft.plate || draft.vin || '');
-
-  const all = getCitations();
-  all.push(draft);
-  saveCitations(all);
-  syncToSupabase(draft, 'insert');
-
-  const issuedId = draft.id;
-  draft = null;
-  showToast('Filed for mail — vehicle left before citation could be placed');
-  showScreen('home');
-  openTicket(issuedId);
+  showToast('Demo only — filing for mail is unavailable');
 }
 
 /* ---------------- HISTORY ---------------- */
@@ -2648,13 +2589,7 @@ function ticketRow(k, v) {
   return '<div class="ticket-row"><span class="k">' + escapeHtml(k) + '</span><span class="v">' + escapeHtml(v || '—') + '</span></div>';
 }
 function printTicket() {
-  const ticketEl = document.querySelector('.ticket');
-  if (ticketEl) {
-    ticketEl.classList.remove('print-w-2', 'print-w-3', 'print-w-4');
-    const width = getPrintWidth();
-    if (width && width !== 'full') ticketEl.classList.add(width);
-  }
-  window.print();
+  showToast('Demo only — ticket printing is unavailable');
 }
 
 function closeTicket() {
@@ -2689,9 +2624,7 @@ function renderSettings() {
   document.getElementById('s-sb-key').value = cfg.key;
   document.getElementById('s-sb-enabled').checked = cfg.enabled;
 
-  const aiCfg = getAIConfig();
-  document.getElementById('s-ai-key').value = aiCfg.apiKey;
-  document.getElementById('s-ai-model').value = aiCfg.model || 'claude-haiku-4-5-20251001';
+  clearLegacyAISettings();
 
   const meterCfg = getMeterVendorConfig();
   document.getElementById('s-meter-vendor').value = meterCfg.vendor;
@@ -2726,11 +2659,8 @@ function saveSyncSettings() {
   showToast('Sync settings saved');
 }
 function saveAISettings() {
-  saveAIConfig({
-    apiKey: document.getElementById('s-ai-key').value.trim(),
-    model: document.getElementById('s-ai-model').value
-  });
-  showToast('AI recognition settings saved');
+  clearLegacyAISettings();
+  showToast('Cloud AI requires a protected server; use local OCR or manual entry');
 }
 function saveMeterVendorSettings() {
   saveMeterVendorConfig({
