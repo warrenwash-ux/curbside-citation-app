@@ -548,6 +548,12 @@ label {
         <span class="live-dot"></span>
         <span id="scan-status">Starting camera…</span>
       </div>
+      <details style="margin:10px 0;">
+        <summary>Scanner details — test build 2</summary>
+        <p class="hint">Only this crop is read on your device. First use may take up to 20 seconds to load the scanner. The text below is unverified.</p>
+        <img id="scan-crop-preview" alt="Image being read by the local scanner" style="display:none;width:100%;max-height:180px;object-fit:contain;" />
+        <p id="scan-raw-text" class="hint">No recognition result yet.</p>
+      </details>
       <div class="zoom-row">
         <button class="zoom-btn" onclick="adjustZoom(-0.5)">−</button>
         <span id="zoom-label">1.0x</span>
@@ -1385,6 +1391,8 @@ let liveStream = null;
 let scanInterval = null;
 let scanBusy = false;
 let scanGeneration = 0;
+let plateWorkerPromise = null;
+let plateOCRBusy = false;
 let plateConsensus = createPlateConsensus();
 let scanPaused = false;
 let lastHitPlate = null;
@@ -1823,6 +1831,9 @@ function startNewCitation() {
   document.getElementById('vehicle-section').style.display = 'none';
   document.getElementById('manual-plate').value = '';
   lastHitPlate = null; lastHitTime = 0;
+  document.getElementById('scan-crop-preview').removeAttribute('src');
+  document.getElementById('scan-crop-preview').style.display = 'none';
+  document.getElementById('scan-raw-text').textContent = 'No recognition result yet.';
   hardwareZoomSupported = false;
   updateZoomUI();
 
@@ -1969,8 +1980,62 @@ function createPlateConsensus() {
   };
 }
 
+/** One reusable OCR worker; a hung load/read must release the controls. */
+async function recognizePlateImage(image) {
+  if (plateOCRBusy) throw new Error('Scanner busy — wait for the previous capture, then try again');
+  plateOCRBusy = true;
+  let timer;
+  let workerPromise;
+  try {
+    if (!plateWorkerPromise) {
+      plateWorkerPromise = Tesseract.createWorker('eng', 1).then(async function (worker) {
+        try {
+          await worker.setParameters({
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            tessedit_pageseg_mode: '11',
+            user_defined_dpi: '150'
+          });
+          return worker;
+        } catch (error) { await worker.terminate(); throw error; }
+      });
+    }
+    workerPromise = plateWorkerPromise;
+    const timeout = new Promise(function (_, reject) {
+      timer = setTimeout(function () { reject(new Error('Scanner timed out — tap Capture Now to retry, or upload a photo')); }, 20000);
+    });
+    return await Promise.race([workerPromise.then(function (worker) { return worker.recognize(image); }), timeout]);
+  } catch (error) {
+    if (plateWorkerPromise === workerPromise) plateWorkerPromise = null;
+    if (workerPromise) workerPromise.then(function (worker) { return worker.terminate(); }).catch(function () {});
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    plateOCRBusy = false;
+  }
+}
+
+/** Keep separate text lines separate: state names and plate frames are not IDs. */
+function extractPlateCandidate(raw) {
+  const candidates = String(raw || '').toUpperCase().split(/\r?\n/).map(function (line) {
+    return line.replace(/[\s-]/g, '');
+  }).filter(isPlausiblePlate);
+  const unique = Array.from(new Set(candidates));
+  return unique.length === 1 ? unique[0] : null;
+}
+
+function showScanDetails(image, raw) {
+  const preview = document.getElementById('scan-crop-preview');
+  const label = document.getElementById('scan-raw-text');
+  if (preview) { preview.src = image; preview.style.display = 'block'; }
+  if (label) label.textContent = raw == null ? 'Loading / reading…' : 'Unverified OCR: ' + (String(raw).slice(0, 240) || '(no text)');
+}
+
 function captureAndRecognize(forced) {
-  if (!draft || (!forced && (!liveStream || scanPaused)) || scanBusy) return;
+  if (!draft || (!forced && (!liveStream || scanPaused))) return;
+  if (scanBusy) {
+    if (forced) updateScanStatus('Still reading the previous frame — recovery will appear within 20 seconds');
+    return;
+  }
   const video = document.getElementById('live-video');
   if (!video || !video.videoWidth) {
     if (forced) updateScanStatus('Camera not ready yet — try again in a second');
@@ -1983,44 +2048,57 @@ function captureAndRecognize(forced) {
   const targetDraft = draft, generation = scanGeneration;
   const current = function () { return draft === targetDraft && scanGeneration === generation; };
   scanBusy = true;
-  if (forced) updateScanStatus('Reading…');
-  const frameDataUrl = captureGuideFrame(video);
+  updateScanStatus(plateWorkerPromise ? 'Reading plate on this device…' : 'Loading local scanner — first use can take up to 20 seconds…');
+  let frameDataUrl;
+  try { frameDataUrl = captureGuideFrame(video); showScanDetails(frameDataUrl, null); }
+  catch (error) { scanBusy = false; updateScanStatus('Could not capture frame — try again or upload a photo'); return; }
   Promise.resolve().then(function () {
     if (!current()) return null;
-    return Tesseract.recognize(frameDataUrl, 'eng', {
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    });
+    return recognizePlateImage(frameDataUrl);
   }).then(function (result) {
     if (!current()) return;
     scanBusy = false;
     if (!result) return;
-    const text = (result.data.text || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+    showScanDetails(frameDataUrl, result.data.text);
+    const text = extractPlateCandidate(result.data.text);
     if (!forced && !plateConsensus.observe(text, Date.now())) {
       updateScanStatus(isPlausiblePlate(text) ? 'Checking another frame for ' + text : 'Scanning — reposition or use manual entry');
       return;
     }
     finalizePlateResult(null, frameDataUrl, forced, text);
-  }).catch(function () {
+  }).catch(function (error) {
     if (!current()) return;
     scanBusy = false;
+    const rawLabel = document.getElementById('scan-raw-text');
+    if (rawLabel) rawLabel.textContent = 'No OCR result: ' + (error.message || 'scanner failed');
+    scanPaused = true;
+    setPauseButtonLabel();
     plateConsensus.reset();
-    updateScanStatus('Scan failed — try again or use manual entry');
+    updateScanStatus(error.message && /Scanner (timed out|busy)/.test(error.message) ? error.message : 'Scanner could not load or read — tap Capture Now to retry, or use manual entry');
   });
 }
 
+/** Map an object-fit:cover preview rectangle back to source video pixels. */
+function guideSourceRect(sourceWidth, sourceHeight, previewWidth, previewHeight, guide) {
+  const scale = Math.max(previewWidth / sourceWidth, previewHeight / sourceHeight);
+  const offsetX = (sourceWidth * scale - previewWidth) / 2;
+  const offsetY = (sourceHeight * scale - previewHeight) / 2;
+  const x = Math.max(0, (guide.x + offsetX) / scale);
+  const y = Math.max(0, (guide.y + offsetY) / scale);
+  return { x: x, y: y, width: Math.min(sourceWidth - x, guide.width / scale), height: Math.min(sourceHeight - y, guide.height / scale) };
+}
+
 function captureGuideFrame(video) {
-  // Sample the centered guide box for speed and accuracy: base ~70% width, ~35% height.
-  // If hardware zoom isn't available, simulate zoom by cropping a smaller, centered
-  // region instead (software zoom) — the on-screen guide box scales to match.
-  const effectiveZoom = hardwareZoomSupported ? 1 : zoomLevel;
-  const wFrac = Math.max(0.7 / effectiveZoom, 0.08);
-  const hFrac = Math.max(0.35 / effectiveZoom, 0.08);
-  const sw = video.videoWidth * wFrac, sh = video.videoHeight * hFrac;
-  const sx = (video.videoWidth - sw) / 2, sy = (video.videoHeight - sh) / 2;
+  const preview = video.getBoundingClientRect();
+  const frame = document.querySelector('#screen-draft .scan-frame').getBoundingClientRect();
+  const crop = guideSourceRect(video.videoWidth, video.videoHeight, preview.width, preview.height,
+    { x: frame.left - preview.left, y: frame.top - preview.top, width: frame.width, height: frame.height });
+  if (!(crop.width > 0 && crop.height > 0)) throw new Error('Empty guide');
   const canvas = document.createElement('canvas');
-  canvas.width = sw; canvas.height = sh;
-  canvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
-  return canvas.toDataURL('image/jpeg', 0.85);
+  const upscale = Math.min(3, Math.max(1, 1000 / crop.width));
+  canvas.width = Math.round(crop.width * upscale); canvas.height = Math.round(crop.height * upscale);
+  canvas.getContext('2d').drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');
 }
 
 function adjustZoom(delta) {
@@ -2167,17 +2245,16 @@ function handleCapture(evt) {
       }
       Promise.resolve().then(function () {
         if (!current()) return null;
-        return Tesseract.recognize(resized, 'eng', {
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        });
+        return recognizePlateImage(resized);
       }).then(function (result) {
         if (!current() || !result) return;
         if (input.value !== originalInput) {
           updateScanStatus('Photo attached — your edited ID was kept; verify and confirm below');
           return;
         }
-        const text = (result.data.text || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
-        input.value = text;
+        showScanDetails(resized, result.data.text);
+        const text = extractPlateCandidate(result.data.text);
+        input.value = text || '';
         updateScanStatus(isPlausiblePlate(text) ? 'Proposed plate: ' + text + ' — verify and confirm below' :
           'Could not read a reliable plate — enter it manually and confirm below');
       }).catch(failed);

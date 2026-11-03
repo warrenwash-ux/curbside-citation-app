@@ -6,7 +6,7 @@ const ctx={draft:{idType:'plate'},scanGeneration:0,document:{getElementById:()=>
  updateScanStatus:m=>messages.push(m),isPlausiblePlate:t=>t==='ABC123',
  FileReader:class {constructor(){readers.push(this);}readAsDataURL(){}},
  resizeImage:(data,width,callback,error)=>resizes.push({callback,error}),
- Tesseract:{recognize:()=>new Promise((resolve,reject)=>pending.push({resolve,reject}))}
+ Tesseract:{},showScanDetails:()=>{},extractPlateCandidate:raw=>String(raw).toUpperCase(),recognizePlateImage:()=>new Promise((resolve,reject)=>pending.push({resolve,reject}))
 };
 vm.createContext(ctx);
 const start=html.indexOf('function handleCapture('),end=html.indexOf('\n}',start)+2;

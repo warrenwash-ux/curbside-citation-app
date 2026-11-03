@@ -1,14 +1,14 @@
 const fs=require('node:fs'), vm=require('node:vm'), assert=require('node:assert/strict');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
 let pending=[], hits=[], messages=[], now=1000;
-const ctx={MIN_PLATE_LEN:4,MAX_PLATE_LEN:8,draft:{id:'one'},liveStream:{},scanPaused:false,scanBusy:false,scanGeneration:0,
+const ctx={MIN_PLATE_LEN:4,MAX_PLATE_LEN:8,draft:{id:'one'},liveStream:{},scanPaused:false,scanBusy:false,scanGeneration:0,plateWorkerPromise:null,showScanDetails:()=>{},
  document:{getElementById:()=>({videoWidth:640})},
- Tesseract:{recognize:()=>new Promise((resolve,reject)=>pending.push({resolve,reject}))},
+ Tesseract:{},recognizePlateImage:()=>new Promise((resolve,reject)=>pending.push({resolve,reject})),
  captureGuideFrame:()=> 'synthetic-image',updateScanStatus:message=>messages.push(message),
  finalizePlateResult:(...args)=>hits.push(args), Date:{now:()=>now}
 };
 vm.createContext(ctx);
-for (const name of ['isPlausiblePlate','createPlateConsensus','captureAndRecognize']) {
+for (const name of ['isPlausiblePlate','extractPlateCandidate','createPlateConsensus','captureAndRecognize']) {
  const start=html.indexOf('function '+name+'('),end=html.indexOf('\n}',start)+2;
  vm.runInContext(html.slice(start,end),ctx);
 }
