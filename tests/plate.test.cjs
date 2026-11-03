@@ -8,7 +8,7 @@ const ctx={
  window:{confirm:()=>accepted},
  showToast:message=>notices.push(message),setTimeout:fn=>timers.push(fn),
  mockVehicleLookup:()=>{lookups++;return {ownerName:'SIMULATED'};},
- fillVehicleFields:()=>{},priorCitationCount:()=>0,checkIssueReady:()=>{}
+ stopLiveScan:()=>{},fillVehicleFields:()=>{},priorCitationCount:()=>0,checkIssueReady:()=>{}
 };
 vm.createContext(ctx);
 for(const name of ['isPlausiblePlate','lookupVehicle']){

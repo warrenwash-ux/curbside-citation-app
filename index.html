@@ -549,8 +549,8 @@ label {
         <span id="scan-status">Starting camera…</span>
       </div>
       <details style="margin:10px 0;">
-        <summary>Scanner details — test build 2</summary>
-        <p class="hint">Only this crop is read on your device. First use may take up to 20 seconds to load the scanner. The text below is unverified.</p>
+        <summary>Scanner details — test build 3</summary>
+        <p class="hint">Automatic recognition is experimental. Only this crop is read on your device. First use may take up to 20 seconds. Raw OCR below is diagnostic only; your typed and confirmed ID takes priority.</p>
         <img id="scan-crop-preview" alt="Image being read by the local scanner" style="display:none;width:100%;max-height:180px;object-fit:contain;" />
         <p id="scan-raw-text" class="hint">No recognition result yet.</p>
       </details>
@@ -570,7 +570,8 @@ label {
           <button class="pill active" data-type="plate" onclick="setIdType('plate')">License Plate</button>
           <button class="pill" data-type="vin" onclick="setIdType('vin')">VIN</button>
         </div>
-        <input id="manual-plate" style="margin-top:10px;" placeholder="Detected plate / VIN — editable" />
+        <label for="manual-plate" class="hint">Plate / VIN to use — your typing takes priority</label>
+        <input id="manual-plate" style="margin-top:10px;" placeholder="Type or correct the plate / VIN" oninput="manualIdEdited()" autocapitalize="characters" autocomplete="off" spellcheck="false" />
         <button class="btn btn-amber" style="margin-top:10px;" onclick="lookupVehicle()">Confirm ID &amp; show simulated record</button>
         <p class="lookup-status" id="lookup-status"></p>
         <p class="hint">Compare the proposed ID with the vehicle, correct it if needed, then confirm. Scanning does not verify ownership or authorize a citation.</p>
@@ -1896,7 +1897,7 @@ async function startLiveScan() {
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
     if (scanGeneration !== generation || draft !== targetDraft) {
       stream.getTracks().forEach(function (track) { track.stop(); });
       return;
@@ -1948,6 +1949,7 @@ function toggleScanPause() {
   scanBusy = false;
   plateConsensus.reset();
   scanPaused = !scanPaused;
+  if (!scanPaused && draft) draft.manualIdOwned = false;
   setPauseButtonLabel();
   updateScanStatus(scanPaused ? 'Paused' : 'Always scanning — frame the plate in the box');
 }
@@ -2031,7 +2033,7 @@ function showScanDetails(image, raw) {
 }
 
 function captureAndRecognize(forced) {
-  if (!draft || (!forced && (!liveStream || scanPaused))) return;
+  if (!draft || (!forced && (!liveStream || scanPaused || draft.manualIdOwned))) return;
   if (scanBusy) {
     if (forced) updateScanStatus('Still reading the previous frame — recovery will appear within 20 seconds');
     return;
@@ -2045,8 +2047,10 @@ function captureAndRecognize(forced) {
     updateScanStatus('Scanner engine unavailable — use manual entry below');
     return;
   }
+  if (forced) draft.manualIdOwned = false; // An explicit new capture may propose a new ID.
+  const originalInput = document.getElementById('manual-plate').value;
   const targetDraft = draft, generation = scanGeneration;
-  const current = function () { return draft === targetDraft && scanGeneration === generation; };
+  const current = function () { return draft === targetDraft && scanGeneration === generation && document.getElementById('manual-plate').value === originalInput; };
   scanBusy = true;
   updateScanStatus(plateWorkerPromise ? 'Reading plate on this device…' : 'Loading local scanner — first use can take up to 20 seconds…');
   let frameDataUrl;
@@ -2138,7 +2142,7 @@ function finalizePlateResult(aiResult, frameDataUrl, forced, fallbackText) {
   const aiPlate = aiResult && aiResult.plate ? String(aiResult.plate).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
   const finalText = aiPlate || fallbackText || null;
   if (!isPlausiblePlate(finalText)) {
-    updateScanStatus(forced ? 'AI could not read a plate — edit below or reposition' : 'Always scanning — point at a plate');
+    updateScanStatus(forced ? 'Local OCR could not read a reliable plate — type it below and confirm' : 'Always scanning — point at a plate');
     return;
   }
   const now = Date.now();
@@ -2151,7 +2155,7 @@ function finalizePlateResult(aiResult, frameDataUrl, forced, fallbackText) {
 }
 
 function handleScanHit(text, frameDataUrl) {
-  if (!draft || !isPlausiblePlate(text)) return;
+  if (!draft || draft.manualIdOwned || !isPlausiblePlate(text)) return;
   const stealth = getStealthMode();
   if (!stealth && navigator.vibrate) navigator.vibrate(200);
   if (!stealth) flashScan();
@@ -2197,6 +2201,23 @@ function flashScan() {
   if (!el) return;
   el.classList.add('flash');
   setTimeout(function () { el.classList.remove('flash'); }, 350);
+}
+
+/** Typing invalidates pending camera, upload and simulated-lookup responses. */
+function manualIdEdited() {
+  if (!draft) return;
+  scanGeneration++;
+  scanBusy = false;
+  scanPaused = true;
+  plateConsensus.reset();
+  draft.manualIdOwned = true;
+  draft.uploadRequestId = (draft.uploadRequestId || 0) + 1;
+  draft.lookupRequestId = (draft.lookupRequestId || 0) + 1;
+  draft.plate = ''; draft.vin = '';
+  document.getElementById('vehicle-section').style.display = 'none';
+  setPauseButtonLabel();
+  checkIssueReady();
+  updateScanStatus('Your typed ID is protected — verify it and tap Confirm ID below');
 }
 
 function setIdType(type) {
@@ -2317,6 +2338,8 @@ function lookupVehicle() {
   const valid = draft.idType === 'plate' ? /^[A-Z0-9]{1,8}$/.test(value) : /^[A-HJ-NPR-Z0-9]{17}$/.test(value);
   if (!valid) { showToast('Check the ID: plates require 1–8 letters/digits; VINs require 17 valid characters'); return; }
   if (!window.confirm('Confirm this ID matches the vehicle: ' + value + '\nThe record shown next is simulated, not a verified vehicle record.')) return;
+  stopLiveScan(); // Confirmation freezes the exact operator-approved ID.
+  draft.manualIdOwned = true;
   const targetDraft = draft;
   const requestId = (targetDraft.lookupRequestId || 0) + 1;
   targetDraft.uploadRequestId = (targetDraft.uploadRequestId || 0) + 1;
@@ -2333,7 +2356,7 @@ function lookupVehicle() {
     const data = mockVehicleLookup(value);
     Object.assign(draft, data);
     fillVehicleFields(draft);
-    document.getElementById('lookup-status').textContent = 'SIMULATED — owner, registration, and payment details are fictional.';
+    document.getElementById('lookup-status').textContent = 'Confirmed ID: ' + value + '. SIMULATED — owner, registration, and payment details are fictional.';
     document.getElementById('vehicle-fields').style.display = 'block';
 
     const priors = priorCitationCount(value);

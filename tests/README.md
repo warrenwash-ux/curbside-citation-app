@@ -9,6 +9,8 @@ node tests/ai-security.test.cjs
 node tests/plate.test.cjs
 node tests/consensus.test.cjs
 node tests/upload.test.cjs
+node tests/ocr-worker.test.cjs
+node tests/manual-id.test.cjs
 ```
 
 Browser checks require `playwright` available to Node and an installed Chromium. Run `node tests/browser.test.cjs`; optionally set `CHROMIUM_EXECUTABLE` to a local executable path. This is development tooling only; the static app needs no build step.
