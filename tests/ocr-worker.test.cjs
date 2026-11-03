@@ -10,7 +10,7 @@ const ctx={MIN_PLATE_LEN:4,MAX_PLATE_LEN:8,plateWorkerPromise:null,plateOCRBusy:
  };}}
 };
 vm.createContext(ctx);
-for(const name of ['isPlausiblePlate','extractPlateCandidate','guideSourceRect']){
+for(const name of ['isPlausiblePlate','extractPlateCandidate','reliablePlateCandidate','guideSourceRect']){
  const start=html.indexOf('function '+name+'('),end=html.indexOf('\n}',start)+2;
  vm.runInContext(html.slice(start,end),ctx);
 }
@@ -27,6 +27,9 @@ assert.equal(r.x,162);assert.equal(r.width,756);assert.equal(r.height,283.5);
 assert.equal(r.y,814.2);
 const landscape=ctx.guideSourceRect(1920,1080,400,300,{x:60,y:96,width:280,height:105});
 assert.equal(landscape.width,1008);assert.ok(landscape.x>0&&landscape.y>0);
+assert.equal(ctx.reliablePlateCandidate({data:{text:'WRONG123',confidence:0}}),null);
+assert.equal(ctx.reliablePlateCandidate({data:{text:'WRONG123'}}),null);
+assert.equal(ctx.reliablePlateCandidate({data:{text:'ABC123',confidence:87}}),'ABC123');
 async function run(){
  const first=await ctx.recognizePlateImage('synthetic');
  assert.equal(ctx.extractPlateCandidate(first.data.text),'ABC123');

@@ -8,7 +8,7 @@ const ctx={MIN_PLATE_LEN:4,MAX_PLATE_LEN:8,draft:{id:'one'},liveStream:{},scanPa
  finalizePlateResult:(...args)=>hits.push(args), Date:{now:()=>now}
 };
 vm.createContext(ctx);
-for (const name of ['isPlausiblePlate','extractPlateCandidate','createPlateConsensus','captureAndRecognize']) {
+for (const name of ['isPlausiblePlate','extractPlateCandidate','reliablePlateCandidate','createPlateConsensus','captureAndRecognize']) {
  const start=html.indexOf('function '+name+'('),end=html.indexOf('\n}',start)+2;
  vm.runInContext(html.slice(start,end),ctx);
 }
@@ -28,7 +28,7 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
 async function read(text,forced=false) {
  ctx.captureAndRecognize(forced);await flush();
  assert.equal(pending.length,1);
- pending.shift().resolve({data:{text}});await flush();
+ pending.shift().resolve({data:{text,confidence:85}});await flush();
 }
 async function run(){
  await read('abc123');assert.equal(hits.length,0);
@@ -36,7 +36,7 @@ async function run(){
  ctx.plateConsensus.reset();now=5400;await read('XYZ789',true);assert.equal(hits.length,2);
  ctx.captureAndRecognize(false);await flush();
  ctx.draft={id:'two'};ctx.scanGeneration++;ctx.scanBusy=false;
- pending.shift().resolve({data:{text:'ABC123'}});await flush();
+ pending.shift().resolve({data:{text:'ABC123',confidence:85}});await flush();
  assert.equal(hits.length,2);assert.equal(ctx.scanBusy,false);
  ctx.captureAndRecognize(false);await flush();
  ctx.scanGeneration++;ctx.scanBusy=false;

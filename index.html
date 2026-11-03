@@ -2025,11 +2025,18 @@ function extractPlateCandidate(raw) {
   return unique.length === 1 ? unique[0] : null;
 }
 
-function showScanDetails(image, raw) {
+/** Conservative rejection gate, not a calibrated probability of plate accuracy. */
+function reliablePlateCandidate(result) {
+  const data = result && result.data;
+  if (!data || !Number.isFinite(data.confidence) || data.confidence < 60) return null;
+  return extractPlateCandidate(data.text);
+}
+
+function showScanDetails(image, raw, confidence) {
   const preview = document.getElementById('scan-crop-preview');
   const label = document.getElementById('scan-raw-text');
   if (preview) { preview.src = image; preview.style.display = 'block'; }
-  if (label) label.textContent = raw == null ? 'Loading / reading…' : 'Unverified OCR: ' + (String(raw).slice(0, 240) || '(no text)');
+  if (label) label.textContent = raw == null ? 'Loading / reading…' : 'Unverified OCR' + (Number.isFinite(confidence) ? ' (engine score ' + Math.round(confidence) + '/100)' : '') + ': ' + (String(raw).slice(0, 240) || '(no text)');
 }
 
 function captureAndRecognize(forced) {
@@ -2063,10 +2070,10 @@ function captureAndRecognize(forced) {
     if (!current()) return;
     scanBusy = false;
     if (!result) return;
-    showScanDetails(frameDataUrl, result.data.text);
-    const text = extractPlateCandidate(result.data.text);
+    showScanDetails(frameDataUrl, result.data.text, result.data.confidence);
+    const text = reliablePlateCandidate(result);
     if (!forced && !plateConsensus.observe(text, Date.now())) {
-      updateScanStatus(isPlausiblePlate(text) ? 'Checking another frame for ' + text : 'Scanning — reposition or use manual entry');
+      updateScanStatus(isPlausiblePlate(text) ? 'Checking another frame for ' + text : 'No reliable plate read — OCR text is only a guess; type the plate below');
       return;
     }
     finalizePlateResult(null, frameDataUrl, forced, text);
@@ -2273,11 +2280,11 @@ function handleCapture(evt) {
           updateScanStatus('Photo attached — your edited ID was kept; verify and confirm below');
           return;
         }
-        showScanDetails(resized, result.data.text);
-        const text = extractPlateCandidate(result.data.text);
+        showScanDetails(resized, result.data.text, result.data.confidence);
+        const text = reliablePlateCandidate(result);
         input.value = text || '';
         updateScanStatus(isPlausiblePlate(text) ? 'Proposed plate: ' + text + ' — verify and confirm below' :
-          'Could not read a reliable plate — enter it manually and confirm below');
+          'Photo attached, but no reliable plate read — type the plate below and confirm');
       }).catch(failed);
     }, failed);
   };
